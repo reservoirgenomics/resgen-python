@@ -1,4 +1,18 @@
+import io
+import os
+import os.path
+
 from setuptools import setup, find_packages, Command
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def read(*parts, **kwargs):
+    filepath = os.path.join(HERE, *parts)
+    encoding = kwargs.pop("encoding", "utf-8")
+    with io.open(filepath, encoding=encoding) as fh:
+        text = fh.read()
+    return text
 
 
 def get_requirements(path):
