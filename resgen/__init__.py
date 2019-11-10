@@ -10,12 +10,11 @@ logger = logging.getLogger(__name__)
 
 __version__ = "0.1.0"
 
-# RESGEN_API = "https://resgen.io/api/v1"
-# RESGEN_BUCKET = "resgen"
+RESGEN_HOST = "https://resgen.io"
+RESGEN_BUCKET = "resgen"
 
-RESGEN_HOST = "http://localhost:8000"
-RESGEN_API = f"{RESGEN_HOST}/api/v1"
-RESGEN_BUCKET = "resgen-test"
+# RESGEN_HOST = "http://localhost:8000"
+# RESGEN_BUCKET = "resgen-test"
 
 
 class InvalidCredentialsException(Exception):
@@ -46,10 +45,24 @@ class ResgenConnection:
         self.token = None
         self.token = self.get_token()
 
+    def authenticated_request(self, func, *args, **kwargs):
+        """Send post request"""
+        token = self.get_token()
+
+        return func(
+            *args, **{**kwargs, "headers": {"Authorization": "JWT {}".format(token)}}
+        )
+
     def get_token(self) -> str:
         """Get a JWT token for interacting with the service."""
         if self.token:
-            return self.token
+            ret = requests.get(
+                f"{self.host}/api/v1/which_user/",
+                headers={"Authorization": "JWT {}".format(self.token)},
+            )
+
+            if ret.status_code == 200:
+                return self.token
 
         ret = requests.post(
             f"{self.host}/api-token-auth/",
@@ -64,8 +77,8 @@ class ResgenConnection:
             raise UnknownConnectionException("Failed to login", ret)
 
         data = json.loads(ret.content.decode("utf8"))
-
-        return data["token"]
+        self.token = data["token"]
+        return self.token
 
     def create_project(self, project_name: str, private: bool = True):
         """Create a project.
@@ -78,12 +91,10 @@ class ResgenConnection:
             project_name: The name of the project to create.
             private: Whether to make this a private project.
         """
-        token = self.get_token()
-
-        ret = requests.post(
+        ret = self.authenticated_request(
+            requests.post,
             f"{self.host}/api/v1/projects/",
             json={"name": project_name, "private": private, "tilesets": []},
-            headers={"Authorization": "JWT {}".format(token)},
         )
 
         if ret.status_code == 409 or ret.status_code == 201:
@@ -107,14 +118,12 @@ class ResgenProject:
 
         Returns up to a limit
         """
-        token = self.conn.get_token()
         url = f"{self.conn.host}/api/v1/list_tilesets/?ui={self.uuid}&offset=0"
-        ret = requests.get(url, headers={"Authorization": "JWT {}".format(token)})
+        ret = self.conn.authenticated_request(requests.get, url)
 
         if ret.status_code != 200:
             raise UnknownConnectionException("Failed to retrieve tilesets", ret)
 
-        print("ret.content:", ret.content)
         return json.loads(ret.content)["results"]
 
         # raise NotImplementedError()
@@ -129,12 +138,12 @@ class ResgenProject:
             The uuid of the newly created dataset.
 
         """
-        token = self.conn.get_token()
-
-        ret = requests.get(
-            f"{self.conn.host}/api/v1/prepare_file_upload/",
-            headers={"Authorization": "JWT {}".format(token)},
+        ret = self.conn.authenticated_request(
+            requests.get, f"{self.conn.host}/api/v1/prepare_file_upload/"
         )
+
+        if ret.status_code != 200:
+            raise UnknownConnectionException("Failed to prepare file upload", ret)
 
         content = json.loads(ret.content)
         filename = op.split(filepath)[1]
@@ -143,19 +152,20 @@ class ResgenProject:
 
         bucket = RESGEN_BUCKET
         if aws.upload_file(filepath, bucket, content, object_name):
-            ret = requests.post(
+            ret = self.conn.authenticated_request(
+                requests.post,
                 f"{self.conn.host}/api/v1/finish_file_upload/",
-                headers={"Authorization": "JWT {}".format(token)},
                 json={"filepath": directory_path, "project": self.uuid},
             )
+
+            if ret.status_code != 200:
+                raise UnknownConnectionException("Failed to finish uploading file", ret)
 
             content = json.loads(ret.content)
             return content["uuid"]
 
     def update_dataset(self, uuid: str, metadata: typing.Dict[str, typing.Any]):
         """Update the properties of a dataset."""
-        token = self.conn.get_token()
-
         new_metadata = {}
 
         if "name" in metadata:
@@ -163,9 +173,9 @@ class ResgenProject:
         if "tags" in metadata:
             new_metadata["tags"] = metadata["tags"]
 
-        ret = requests.patch(
+        ret = self.conn.authenticated_request(
+            requests.patch,
             f"{self.conn.host}/api/v1/tilesets/{uuid}/",
-            headers={"Authorization": "JWT {}".format(token)},
             json=new_metadata,
         )
 
