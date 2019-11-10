@@ -2,6 +2,7 @@ import json
 import logging
 import os.path as op
 import requests
+import typing
 
 from resgen import aws
 
@@ -26,7 +27,12 @@ class InvalidCredentialsException(Exception):
 class UnknownConnectionException(Exception):
     """Some error occurred when trying to perform a network operation."""
 
-    pass
+    def __init__(self, message, request_return):
+        super().__init__(
+            f"{message}: "
+            f"status_code: {request_return.status_code}, "
+            f"content: {request_return.content}"
+        )
 
 
 class ResgenConnection:
@@ -45,23 +51,19 @@ class ResgenConnection:
         if self.token:
             return self.token
 
-        login = requests.post(
+        ret = requests.post(
             f"{self.host}/api-token-auth/",
             data={"username": self.username, "password": self.password},
         )
 
-        if login.status_code == 400:
+        if ret.status_code == 400:
             raise InvalidCredentialsException(
                 "The provided username and password are incorrect"
             )
-        elif login.status_code != 200:
-            raise UnknownConnectionException(
-                "Failed to login, "
-                f"status_code: {login.status_code}, "
-                f"content: {login.content}"
-            )
+        elif ret.status_code != 200:
+            raise UnknownConnectionException("Failed to login", ret)
 
-        data = json.loads(login.content.decode("utf8"))
+        data = json.loads(ret.content.decode("utf8"))
 
         return data["token"]
 
@@ -89,11 +91,7 @@ class ResgenConnection:
 
             return ResgenProject(content["uuid"], self)
 
-        raise UnknownConnectionException(
-            "Failed to create project: "
-            f"status_code: {ret.status_code}, "
-            f"content: {ret.content}"
-        )
+        raise UnknownConnectionException("Failed to create project", ret)
 
 
 class ResgenProject:
@@ -114,11 +112,7 @@ class ResgenProject:
         ret = requests.get(url, headers={"Authorization": "JWT {}".format(token)})
 
         if ret.status_code != 200:
-            raise UnknownConnectionException(
-                "Failed to retrieve tilesets: "
-                f"status_code: {ret.status_code}, "
-                f"content: {ret.content}"
-            )
+            raise UnknownConnectionException("Failed to retrieve tilesets", ret)
 
         print("ret.content:", ret.content)
         return json.loads(ret.content)["results"]
@@ -142,16 +136,12 @@ class ResgenProject:
             headers={"Authorization": "JWT {}".format(token)},
         )
 
-        print("ret:", ret)
-        print("ret.content", ret.content)
-
         content = json.loads(ret.content)
         filename = op.split(filepath)[1]
         directory_path = f"{content['fileDirectory']}/{filename}"
         object_name = f"{content['uploadBucketPrefix']}/{filename}"
 
         bucket = RESGEN_BUCKET
-        print("Uploading object name %s to bucket %s", object_name, bucket)
         if aws.upload_file(filepath, bucket, content, object_name):
             ret = requests.post(
                 f"{self.conn.host}/api/v1/finish_file_upload/",
@@ -162,27 +152,64 @@ class ResgenProject:
             content = json.loads(ret.content)
             return content["uuid"]
 
-    def sync_dataset(self, filepath: str):
+    def update_dataset(self, uuid: str, metadata: typing.Dict[str, typing.Any]):
+        """Update the properties of a dataset."""
+        token = self.conn.get_token()
+
+        new_metadata = {}
+
+        if "name" in metadata:
+            new_metadata["name"] = metadata["name"]
+        if "tags" in metadata:
+            new_metadata["tags"] = metadata["tags"]
+
+        ret = requests.patch(
+            f"{self.conn.host}/api/v1/tilesets/{uuid}/",
+            headers={"Authorization": "JWT {}".format(token)},
+            json=new_metadata,
+        )
+
+        if ret.status_code != 202:
+            raise UnknownConnectionException("Failed to update dataset", ret)
+
+        return uuid
+
+    def sync_dataset(self, filepath: str, metadata: typing.Dict[str, typing.Any]):
         """Check if this file already exists in this dataset.
 
-        Do nothing if it does and create it if it doesn't.
+        Do nothing if it does and create it if it doesn't. If a new
+        dataset is created.
+
+        In both instances, ensure that the metadata is updated. The available
+        metadata tags that can be updated are: `name` and `tags`
+
+        If more than one dataset with this name exists, raise a ValueError.
         """
         datasets = self.list_datasets()
         filename = op.split(filepath)[1]
 
-        print("filename:", filename)
-
         def ds_filename(dataset):
             """Return just the filename of a dataset."""
-            fn = op.split(dataset["datafile"][1])
-            print("fn:", fn)
+            fn = op.split(dataset["datafile"])[1]
+            return fn
 
         matching_datasets = [d for d in datasets if ds_filename(d) == filename]
 
-        print("datasets:", datasets)
-        print("matching_datasets", matching_datasets)
+        if len(matching_datasets) > 1:
+            raise ValueError("More than one matching dataset")
 
-        pass
+        if not len(matching_datasets):
+            uuid = self.add_dataset(filepath)
+        else:
+            uuid = matching_datasets[0]["uuid"]
+
+        to_update = {}
+        if "name" in metadata:
+            to_update["name"] = metadata["name"]
+        if "tags" in metadata:
+            to_update["tags"] = metadata["tags"]
+
+        self.update_dataset(uuid, to_update)
 
 
 def connect(username: str, password: str, host: str = RESGEN_HOST) -> ResgenConnection:
