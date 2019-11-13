@@ -184,7 +184,14 @@ class ResgenProject:
 
         return uuid
 
-    def sync_dataset(self, filepath: str, metadata: typing.Dict[str, typing.Any]):
+    def sync_dataset(
+        self,
+        filepath: str,
+        filetype=None,
+        datatype=None,
+        assembly=None,
+        metadata: typing.Dict[str, typing.Any] = {},
+    ):
         """Check if this file already exists in this dataset.
 
         Do nothing if it does and create it if it doesn't. If a new
@@ -213,11 +220,27 @@ class ResgenProject:
         else:
             uuid = matching_datasets[0]["uuid"]
 
-        to_update = {}
+        to_update = {"tags": []}
         if "name" in metadata:
             to_update["name"] = metadata["name"]
         if "tags" in metadata:
             to_update["tags"] = metadata["tags"]
+
+        if filetype:
+            to_update["tags"] = [
+                t for t in to_update["tags"] if not t["name"].startswith("filetype:")
+            ]
+            to_update["tags"] += [{"name": f"filetype:{filetype}"}]
+        if datatype:
+            to_update["tags"] = [
+                t for t in to_update["tags"] if not t["name"].startswith("datatype:")
+            ]
+            to_update["tags"] += [{"name": f"datatype:{datatype}"}]
+        if assembly:
+            to_update["tags"] = [
+                t for t in to_update["tags"] if not t["name"].startswith("assembly:")
+            ]
+            to_update["tags"] += [{"name": f"assembly:{assembly}"}]
 
         self.update_dataset(uuid, to_update)
 
