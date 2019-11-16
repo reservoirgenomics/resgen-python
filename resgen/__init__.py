@@ -17,6 +17,20 @@ RESGEN_BUCKET = "resgen"
 # RESGEN_BUCKET = "resgen-test"
 
 
+def update_tags(current_tags, **kwargs):
+    """Update a list of tags to use for searching.
+
+    If a tag type (e.g. 'datatype') that is already in current_tags
+    is specified as part of kwargs, then it overwrites the one in
+    current_tags.
+    """
+    for tag in kwargs:
+        current_tags = [t for t in current_tags if not t["name"].startwith(f"{tag}:")]
+        current_tags += [{"name": f"{tag}:{kwargs[tag]}"}]
+
+    return current_tags
+
+
 class InvalidCredentialsException(Exception):
     """Raised when invalid credentials are passed in."""
 
@@ -103,6 +117,22 @@ class ResgenConnection:
             return ResgenProject(content["uuid"], self)
 
         raise UnknownConnectionException("Failed to create project", ret)
+
+    def find_datasets(self, search_string="", **kwargs):
+        """Search for datasets."""
+        tags_line = "&".join(
+            [f"t={k}:{v}" for k, v in kwargs.items() if k != "search_string"]
+        )
+
+        url = f"{self.host}/api/v1/list_tilesets/?x=y&{tags_line}"
+        ret = self.authenticated_request(requests.get, url)
+
+        if ret.status_code == 200:
+            content = json.loads(ret.content)
+
+            return content
+
+        raise UnknownConnectionException("Failed to retrieve tilesets", ret)
 
 
 class ResgenProject:
