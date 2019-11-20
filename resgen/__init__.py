@@ -4,7 +4,10 @@ import os.path as op
 import requests
 import typing
 
+import higlass.client as hgc
+from higlass import Track
 from resgen import aws
+# import resgen.utils as rgu
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,15 @@ def update_tags(current_tags, **kwargs):
     return current_tags
 
 
+def tags_to_datatype(tags):
+    """Extract a datatype from a set of tags"""
+    for tag in tags:
+        if tag["name"].startswith("datatype:"):
+            return tag["name"].split(":")[1]
+
+    return None
+
+
 class InvalidCredentialsException(Exception):
     """Raised when invalid credentials are passed in."""
 
@@ -45,6 +57,69 @@ class UnknownConnectionException(Exception):
             f"{message}: "
             f"status_code: {request_return.status_code}, "
             f"content: {request_return.content}"
+        )
+
+class ChromosomeInfo:
+    def __init__(self):
+        self.total_length = 0
+        self.cum_chrom_lengths = {}
+        self.chrom_lengths = {}
+        self.chrom_order = []
+
+    def to_abs(self, chrom, pos):
+        """Calculate absolute coordinates."""
+        return self.cum_chrom_lengths[chrom] + pos
+
+def get_chrominfo_from_string(chromsizes_str):
+    chrom_info = ChromosomeInfo()
+    total_length = 0
+
+    for line in chromsizes_str.strip('\n').split('\n'):
+        rec = line.split()
+        total_length += int(rec[1])
+
+        chrom_info.cum_chrom_lengths[rec[0]] = total_length - int(rec[1])
+        chrom_info.chrom_lengths[rec[0]] = int(rec[1])
+        chrom_info.chrom_order += [rec[0]]
+
+
+    chrom_info.total_length = total_length
+    return chrom_info
+
+
+class ResgenDataset:
+    """Encapsulation of a resgen dataset. Typically initialized
+    from the return of a dataset search or sync on the server."""
+
+    def __init__(self, conn, data):
+        """Initialize with data returned from the tileset server."""
+        self.data = data
+
+        self.conn = conn
+
+        self.uuid = data["uuid"]
+        self.tags = data["tags"]
+        self.name = data["name"]
+
+    def __str__(self):
+        """String representation."""
+        return f"{self.uuid[:8]}: {self.name}"
+
+    def __repr__(self):
+        """String representation."""
+        return f"{self.uuid[:8]}: {self.name}"
+
+    def to_hg_track(self, **options):
+        """Create a higlass track from this dataset."""
+        datatype = tags_to_datatype(self.tags)
+        track_type, position = hgc.datatype_to_tracktype(datatype)
+
+        return Track(
+            track_type,
+            position,
+            tileset_uuid=self.uuid,
+            server=f"{self.conn.host}/api/v1",
+            options=options,
         )
 
 
@@ -118,21 +193,51 @@ class ResgenConnection:
 
         raise UnknownConnectionException("Failed to create project", ret)
 
-    def find_datasets(self, search_string="", **kwargs):
+    def find_datasets(self, search_string="", project=None, limit=10, **kwargs):
         """Search for datasets."""
         tags_line = "&".join(
-            [f"t={k}:{v}" for k, v in kwargs.items() if k != "search_string"]
+            [
+                f"t={k}:{v}"
+                for k, v in kwargs.items()
+                if k not in ["search_string", "project", "limit"]
+            ]
         )
 
         url = f"{self.host}/api/v1/list_tilesets/?x=y&{tags_line}"
+        if project:
+            url += f"&ui={project.uuid}"
+
+        url += f"&ac={search_string}&limit={limit}"
         ret = self.authenticated_request(requests.get, url)
 
         if ret.status_code == 200:
             content = json.loads(ret.content)
 
-            return content
+            return [ResgenDataset(self, c) for c in content["results"]]
 
         raise UnknownConnectionException("Failed to retrieve tilesets", ret)
+
+    def get_genes(self, annotations_ds, gene_name):
+        """Retreive gene information by searching by gene name."""
+        url = f"{self.host}/api/v1/suggest/?d={annotations_ds.uuid}&ac={gene_name}"
+
+        ret = self.authenticated_request(requests.get, url)
+
+        if ret.status_code != 200:
+            raise UnknownConnectionException("Failed to retrieve genes", ret)
+
+        suggestions = json.loads(ret.content)
+        return suggestions
+
+    def get_chrominfo(self, chrominfo_ds):
+        """Retrieve chromosome information from a chromsizes dataset."""
+        url = f"{self.host}/api/v1/chrom-sizes/?id={chrominfo_ds.uuid}"
+        ret = self.authenticated_request(requests.get, url)
+
+        if ret.status_code != 200:
+            raise UnknownConnectionException("Failed to retrieve chrominfo", ret)
+
+        return get_chrominfo_from_string(ret.content.decode('utf8'))
 
 
 class ResgenProject:
