@@ -403,15 +403,15 @@ class ResgenProject:
 
         def ds_filename(dataset):
             """Return just the filename of a dataset."""
-            fn = op.split(dataset["datafile"])[1]
-            return fn
+            filename = op.split(dataset["datafile"])[1]
+            return filename
 
         matching_datasets = [d for d in datasets if ds_filename(d) == filename]
 
         if len(matching_datasets) > 1:
             raise ValueError("More than one matching dataset")
 
-        if not len(matching_datasets):
+        if not matching_datasets:
             uuid = self.add_dataset(filepath, download=download)
         else:
             uuid = matching_datasets[0]["uuid"]

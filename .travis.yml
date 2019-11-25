@@ -11,7 +11,7 @@ matrix:
       script:
         - pytest
       before_deploy:
-        - pip install --user -r docs/requirements.txt
+        - pip install -r docs/requirements.txt
         - cd docs; ./build.sh; cd -
       deploy:
         - &s3
