@@ -114,7 +114,7 @@ class ResgenDataset:
         """String representation."""
         return f"{self.uuid[:8]}: {self.name}"
 
-    def to_hg_track(self, **options):
+    def hg_track(self, height=None, width=None, **options):
         """Create a higlass track from this dataset."""
         datatype = tags_to_datatype(self.tags)
         track_type, position = hgc.datatype_to_tracktype(datatype)
@@ -122,6 +122,8 @@ class ResgenDataset:
         return Track(
             track_type,
             position,
+            height=height,
+            width=width,
             tileset_uuid=self.uuid,
             server=f"{self.conn.host}/api/v1",
             options=options,
@@ -175,7 +177,7 @@ class ResgenConnection:
         self.token = data["token"]
         return self.token
 
-    def create_project(self, project_name: str, private: bool = True):
+    def find_or_create_project(self, project_name: str, private: bool = True):
         """Create a project.
 
         For now this function can only create a project for the
