@@ -1,12 +1,16 @@
+import base64
 import json
 import logging
 import os.path as op
 import requests
+import slugid
+import tempfile
 import typing
 
 import higlass.client as hgc
 from higlass import Track
 from resgen import aws
+
 # import resgen.utils as rgu
 
 logger = logging.getLogger(__name__)
@@ -59,6 +63,7 @@ class UnknownConnectionException(Exception):
             f"content: {request_return.content}"
         )
 
+
 class ChromosomeInfo:
     def __init__(self):
         self.total_length = 0
@@ -70,18 +75,18 @@ class ChromosomeInfo:
         """Calculate absolute coordinates."""
         return self.cum_chrom_lengths[chrom] + pos
 
+
 def get_chrominfo_from_string(chromsizes_str):
     chrom_info = ChromosomeInfo()
     total_length = 0
 
-    for line in chromsizes_str.strip('\n').split('\n'):
+    for line in chromsizes_str.strip("\n").split("\n"):
         rec = line.split()
         total_length += int(rec[1])
 
         chrom_info.cum_chrom_lengths[rec[0]] = total_length - int(rec[1])
         chrom_info.chrom_lengths[rec[0]] = int(rec[1])
         chrom_info.chrom_order += [rec[0]]
-
 
     chrom_info.total_length = total_length
     return chrom_info
@@ -126,10 +131,11 @@ class ResgenDataset:
 class ResgenConnection:
     """Connection to the resgen server."""
 
-    def __init__(self, username, password, host=RESGEN_HOST):
+    def __init__(self, username, password, host=RESGEN_HOST, bucket=RESGEN_BUCKET):
         self.username = username
         self.password = password
         self.host = host
+        self.bucket = bucket
 
         self.token = None
         self.token = self.get_token()
@@ -237,7 +243,7 @@ class ResgenConnection:
         if ret.status_code != 200:
             raise UnknownConnectionException("Failed to retrieve chrominfo", ret)
 
-        return get_chrominfo_from_string(ret.content.decode('utf8'))
+        return get_chrominfo_from_string(ret.content.decode("utf8"))
 
 
 class ResgenProject:
@@ -263,19 +269,13 @@ class ResgenProject:
 
         # raise NotImplementedError()
 
-    def add_dataset(self, filepath: str):
-        """Add a dataset
-
-        Args:
-            filepath: The filename of the dataset to add.
-
-        Returns:
-            The uuid of the newly created dataset.
-
-        """
-        ret = self.conn.authenticated_request(
-            requests.get, f"{self.conn.host}/api/v1/prepare_file_upload/"
-        )
+    def upload_to_resgen_aws(self, filepath, prefix=None):
+        """Upload file to a resgen aws bucket."""
+        logger.info("Getting upload credentials for file: %s", filepath)
+        url = f"{self.conn.host}/api/v1/prepare_file_upload/"
+        if prefix:
+            url = f"{url}/?d={prefix}"
+        ret = self.conn.authenticated_request(requests.get, url)
 
         if ret.status_code != 200:
             raise UnknownConnectionException("Failed to prepare file upload", ret)
@@ -285,19 +285,60 @@ class ResgenProject:
         directory_path = f"{content['fileDirectory']}/{filename}"
         object_name = f"{content['uploadBucketPrefix']}/{filename}"
 
-        bucket = RESGEN_BUCKET
+        logger.info("Uploading to aws object: %s", object_name)
+
+        bucket = self.conn.resgen_bucket
         if aws.upload_file(filepath, bucket, content, object_name):
+            return directory_path
+
+        return None
+
+    def add_dataset(self, filepath: str, download: bool = False):
+        """Add a dataset
+
+        Args:
+            filepath: The filename of the dataset to add. Can also be a url.
+            download: If the filepath is a url, download it and save it to our
+                datastore. Useful for files on ftp servers or servers that do
+                not have range requests.
+
+        Returns:
+            The uuid of the newly created dataset.
+
+        """
+        if download:
             ret = self.conn.authenticated_request(
                 requests.post,
-                f"{self.conn.host}/api/v1/finish_file_upload/",
-                json={"filepath": directory_path, "project": self.uuid},
+                f"{self.conn.host}/api/v1/tilesets/",
+                json={
+                    "datafile": filepath,
+                    "private": True,
+                    "project": self.uuid,
+                    "description": f"Downloaded from {filepath}",
+                    "download": True,
+                    "tags": [],
+                },
             )
 
-            if ret.status_code != 200:
-                raise UnknownConnectionException("Failed to finish uploading file", ret)
+            print("ret.status_code:", ret.status_code)
+            print("ret.content", ret.content)
+            return
 
-            content = json.loads(ret.content)
-            return content["uuid"]
+        directory_path = self.upload_to_resgen_aws(filepath)
+
+        logger.info("Adding tileset entry for uploaded file: %s", directory_path)
+
+        ret = self.conn.authenticated_request(
+            requests.post,
+            f"{self.conn.host}/api/v1/finish_file_upload/",
+            json={"filepath": directory_path, "project": self.uuid},
+        )
+
+        if ret.status_code != 200:
+            raise UnknownConnectionException("Failed to finish uploading file", ret)
+
+        content = json.loads(ret.content)
+        return content["uuid"]
 
     def update_dataset(self, uuid: str, metadata: typing.Dict[str, typing.Any]):
         """Update the properties of a dataset."""
@@ -319,6 +360,23 @@ class ResgenProject:
 
         return uuid
 
+    def save_viewconf(self, viewconf, name):
+        """Save a viewconf to this project."""
+
+        post_data = {
+            "viewconf": json.dumps(viewconf.to_dict()),
+            "project": self.uuid,
+            "name": name,
+            "visible": True,
+            "uid": slugid.nice(),
+        }
+
+        ret = self.conn.authenticated_request(
+            requests.post, f"{self.conn.host}/api/v1/viewconfs/", json=post_data
+        )
+
+        print("ret:", ret)
+
     def sync_dataset(
         self,
         filepath: str,
@@ -326,6 +384,7 @@ class ResgenProject:
         datatype=None,
         assembly=None,
         metadata: typing.Dict[str, typing.Any] = {},
+        download=False,
     ):
         """Check if this file already exists in this dataset.
 
@@ -351,7 +410,7 @@ class ResgenProject:
             raise ValueError("More than one matching dataset")
 
         if not len(matching_datasets):
-            uuid = self.add_dataset(filepath)
+            uuid = self.add_dataset(filepath, download=download)
         else:
             uuid = matching_datasets[0]["uuid"]
 
