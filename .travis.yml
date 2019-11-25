@@ -3,10 +3,25 @@ matrix:
     - language: python
       sudo: required
       python:
-        - '3.7'
+        - "3.7"
       cache: apt
       install:
         - pip install -r requirements.txt
         - python setup.py install
       script:
         - pytest
+      before_deploy:
+        - pip install --user -r docs/requirements.txt
+        - cd docs; ./build.sh; cd -
+      deploy:
+        - &s3
+          provider: s3
+          skip_cleanup: true
+          access_key_id: AKIA4XDAONO3AAVXN36H
+          secret_access_key:
+            secure: xYgT67PIKz6GtYwnIOE9s1GEdXVx2nlrrdMDAC/DAJT8JX/b7m+1n3woh8iITuiUb/ZNQEbfnGFY0+pIFLb9sWyXDkyWZ0PxnQPyvu3iQ+inxskKnnwq8DNINUUxqoXhZNXSNViwaFfAOyRc/D9GFFHMu9vWhNgxadtZsk9biGxyTU5NE6e2jy0wYLUsoaH+pED9PAd8I77IdYr7bWz9LCAbU9ZJMst7Ip0X5gssji1ZUDFk38A4VR8m2CKwM5D7NyUR/DLwLnJH1xq8g4fIxaTsVtz0CZeyvdlOEDVmFJYI1BT6/h1CCw4md4IbTneN+IZaBjItHyLRJh5bBPhsderWo7DC/xPxWdDjgiegOR44JKn/c52BGV7ThSxB4txFaSmYp1gFaWDgnLnLofKLFjhyTUpos1ooQn2VLPxAycQayaCYE58lFLEBPsczMKpIvU3Q5t22VfBInWY1TsicN+CuT6lFSozc0Sv3b6XirbG0zWyx+HfoxuBZTb5MaHnCz3u3wx3CCnqB7YGm0egYvbKABFRyIiBe1QP63gTRXozPu9ns6dSpUk1VKibsBMXJAHJomaTwpzC0yOfunM4eV4Zz4VqDvDGVSOkcRGqr8XDTVsb5azvnPj1eyPSA6P4qK+hmcadtbYTC5cPV4rQ1ibENWVAUJ6NBskP/r0y5TvE=
+          bucket: docs-python.resgen.io
+          local-dir: docs/_build/html
+          acl: public_read
+          on:
+            branch: master

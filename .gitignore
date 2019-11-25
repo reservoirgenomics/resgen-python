@@ -1,3 +1,5 @@
+docs/_build
+higlass-python.log
 COMMANDS
 .DS_Store
 notebooks
