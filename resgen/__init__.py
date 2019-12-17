@@ -4,7 +4,9 @@ import logging
 import os.path as op
 import requests
 import slugid
+import sys
 import tempfile
+import time
 import typing
 
 import higlass.client as hgc
@@ -114,10 +116,22 @@ class ResgenDataset:
         """String representation."""
         return f"{self.uuid[:8]}: {self.name}"
 
-    def hg_track(self, height=None, width=None, **options):
+    def hg_track(
+        self, track_type=None, position=None, height=None, width=None, **options
+    ):
         """Create a higlass track from this dataset."""
         datatype = tags_to_datatype(self.tags)
-        track_type, position = hgc.datatype_to_tracktype(datatype)
+
+        if track_type is None:
+            track_type, position = hgc.datatype_to_tracktype(datatype)
+        else:
+            if position is None:
+                position = hgc.tracktype_default_position(track_type)
+            if position is None:
+                raise ValueError(
+                    f"No default position for track type: {track_type}. "
+                    "Please specify a position"
+                )
 
         return Track(
             track_type,
@@ -201,6 +215,17 @@ class ResgenConnection:
 
         raise UnknownConnectionException("Failed to create project", ret)
 
+    def get_dataset(self, uuid):
+        """Retrieve a dataset."""
+        url = f"{self.host}/api/v1/tilesets/{uuid}/"
+
+        ret = self.authenticated_request(requests.get, url)
+
+        if ret.status_code != 200:
+            raise UnknownConnectionException("Unable to get dataset", ret)
+
+        return json.loads(ret.content)
+
     def find_datasets(self, search_string="", project=None, limit=10, **kwargs):
         """Search for datasets."""
         tags_line = "&".join(
@@ -247,6 +272,22 @@ class ResgenConnection:
 
         return get_chrominfo_from_string(ret.content.decode("utf8"))
 
+    def download_progress(self, tileset_uuid):
+        """Get the download progress for a tileset.
+
+        Raise an exception if there's no recorded tileset
+        progress for this uuid."""
+        url = f"{self.host}/api/v1/download_progress/?d={tileset_uuid}"
+
+        ret = self.authenticated_request(requests.get, url)
+
+        if ret.status_code != 200:
+            raise UnknownConnectionException(
+                "Failed to retrieve download progress", ret
+            )
+
+        return json.loads(ret.content)
+
 
 class ResgenProject:
     """Encapsulates a project on the resgen service."""
@@ -289,7 +330,7 @@ class ResgenProject:
 
         logger.info("Uploading to aws object: %s", object_name)
 
-        bucket = self.conn.resgen_bucket
+        bucket = self.conn.bucket
         if aws.upload_file(filepath, bucket, content, object_name):
             return directory_path
 
@@ -322,9 +363,30 @@ class ResgenProject:
                 },
             )
 
-            print("ret.status_code:", ret.status_code)
-            print("ret.content", ret.content)
-            return
+            content = json.loads(ret.content)
+
+            progress = {"downloaded": 0, "uploaded": 0, "filesize": 1}
+            while (
+                progress["downloaded"] < progress["filesize"]
+                or progress["uploaded"] < progress["filesize"]
+                or progress["downloaded"] == 0
+            ):
+                try:
+                    progress = self.conn.download_progress(content["uuid"])
+                except UnknownConnectionException:
+                    pass
+                time.sleep(0.5)
+
+                if progress["filesize"] > 0:
+                    percent_done = (
+                        100
+                        * (progress["downloaded"] + progress["uploaded"])
+                        / (2 * progress["filesize"])
+                    )
+
+                    sys.stdout.write(f"\r {percent_done:.2f}% Complete")
+
+            return content["uuid"]
 
         directory_path = self.upload_to_resgen_aws(filepath)
 
@@ -339,6 +401,7 @@ class ResgenProject:
         if ret.status_code != 200:
             raise UnknownConnectionException("Failed to finish uploading file", ret)
 
+        print("content:", ret.content)
         content = json.loads(ret.content)
         return content["uuid"]
 
@@ -362,11 +425,23 @@ class ResgenProject:
 
         return uuid
 
+    def delete_dataset(self, uuid: str):
+        """Delete a dataset."""
+        ret = self.conn.authenticated_request(
+            requests.delete, f"{self.conn.host}/api/v1/tilesets/{uuid}/"
+        )
+
+        if ret.status_code != 204:
+            raise UnknownConnectionException("Failed to delete dataset", ret)
+
+        return uuid
+
     def save_viewconf(self, viewconf, name):
         """Save a viewconf to this project."""
+        viewconf_str = json.dumps(viewconf)
 
         post_data = {
-            "viewconf": json.dumps(viewconf.to_dict()),
+            "viewconf": viewconf_str,
             "project": self.uuid,
             "name": name,
             "visible": True,
@@ -386,7 +461,6 @@ class ResgenProject:
         datatype=None,
         assembly=None,
         metadata: typing.Dict[str, typing.Any] = {},
-        download=False,
     ):
         """Check if this file already exists in this dataset.
 
@@ -397,7 +471,18 @@ class ResgenProject:
         metadata tags that can be updated are: `name` and `tags`
 
         If more than one dataset with this name exists, raise a ValueError.
+
+        Args:
         """
+        if (
+            filepath.startswith("http://")
+            or filepath.startswith("https://")
+            or filepath.startswith("ftp://")
+        ):
+            download = True
+        else:
+            download = False
+
         datasets = self.list_datasets()
         filename = op.split(filepath)[1]
 
@@ -438,7 +523,7 @@ class ResgenProject:
             ]
             to_update["tags"] += [{"name": f"assembly:{assembly}"}]
 
-        self.update_dataset(uuid, to_update)
+        return self.update_dataset(uuid, to_update)
 
 
 def connect(username: str, password: str, host: str = RESGEN_HOST) -> ResgenConnection:

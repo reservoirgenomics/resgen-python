@@ -19,6 +19,9 @@ For now, we recommend storing your username and password in environment variable
 
 .. code-block:: python
 
+  import os
+  import resgen as rg
+
   rgc = rg.connect(
     os.getenv('RESGEN_USER'),
     os.getenv('RESGEN_PASSWORD')
@@ -31,12 +34,22 @@ Once logged in, all activity needs to take place within a project. This is manag
 
 .. code-block:: python
 
-  project = rgc.create_project('Kaaij et al 2019')
+  project = rgc.find_or_create_project('My project')
 
 Managing Data
 -------------
 
+Use ``sync_dataset`` to upload data to a project. This function will check if a dataset with this filename exists in the project and uploads the local file if it doesn't. If a dataset with an equivalent filename exists in the project, this command will simply return its uuid.
 
+.. code-block:: python
+
+  project.sync_dataset(
+    'AdnpKO.1000.mcool',datatype="matrix", filetype="cooler", assembly="mm10"
+  )
+
+If the passed in dataset is a url, then it will first be downloaded and then added to the project. This may take some
+time during which the dataset will appear to be there but
+actually be incomplete.
 
 Viewing Data
 ------------
