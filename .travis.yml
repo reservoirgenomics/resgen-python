@@ -23,13 +23,13 @@ matrix:
       local-dir: docs/_build/html
       acl: public_read
       on:
-        branch: master
-deploy:
-  provider: pypi
-  user: pkerpedjiev
-  password:
-    secure: NDOBxDy3My+Uj2jjFJgI2XCrQn9xmc47sssNqxhzn1SQkeTKyG/Mo1SP67tVhXSThd0EFneTUyYinZ0XnLzQE8FVXf7cv6HRheX7D5m49+u74XwY3i7UZt93oZNF0BuxkOdh2vh4kat3Mw1oQRXKVUjuGL3aUUBpuUX+nRhzooNRL/NGNHzuWP9IjJjmn6+aPfirntMRTvNQOjMCJhcaULd6GgCUeFP1+ZXLbPpT8EtFOkXzm78mWisuHaeRmjgJV3cbsMGFc6kNT/4c1CvJMbzsEcbCdmVOrrbOAZ2hCxkldswhBEwl762w6JYAGidPUEv02ayynnQ7a12TgbDZngGTWOufplZR5EN8IAVL23R7aPIhxOFoFuuHFdgEFzFOstCCezkgf3g506Rz7iHaHiSZ86SgBoHfboCtmCsGyZ4BlStkPOgiCCFebHdFYQqWFoiLqrpFwocS47jr94A2GwpFGIcVMh0LHNWjF7Vq3YFGDaxwsJZ6Iw9yBUNeqVd/gdNX33uoQWHJKgAESuA3gYDnt698b5Q2Z0CKzh0hluLRJo5a9lGQvuluXuOUTSIiyfMGSoYCEM8axykwWhcJv8NucHXS/j3AhCf7e+2n+zZvFM+SDfX+Yd8qQBsYg9jn+qOMbO8zdm0Cd0aOMQxTnaBtNmsLGFGMxG8He1mcC/Y=
-  on:
-    tags: true
-    distributions: sdist bdist_wheel
-    repo: reservoirgenomics/resgen-python
+        tags: true
+    - provider: pypi
+      user: pkerpedjiev
+      skip_cleanup: true
+      password:
+        secure: NDOBxDy3My+Uj2jjFJgI2XCrQn9xmc47sssNqxhzn1SQkeTKyG/Mo1SP67tVhXSThd0EFneTUyYinZ0XnLzQE8FVXf7cv6HRheX7D5m49+u74XwY3i7UZt93oZNF0BuxkOdh2vh4kat3Mw1oQRXKVUjuGL3aUUBpuUX+nRhzooNRL/NGNHzuWP9IjJjmn6+aPfirntMRTvNQOjMCJhcaULd6GgCUeFP1+ZXLbPpT8EtFOkXzm78mWisuHaeRmjgJV3cbsMGFc6kNT/4c1CvJMbzsEcbCdmVOrrbOAZ2hCxkldswhBEwl762w6JYAGidPUEv02ayynnQ7a12TgbDZngGTWOufplZR5EN8IAVL23R7aPIhxOFoFuuHFdgEFzFOstCCezkgf3g506Rz7iHaHiSZ86SgBoHfboCtmCsGyZ4BlStkPOgiCCFebHdFYQqWFoiLqrpFwocS47jr94A2GwpFGIcVMh0LHNWjF7Vq3YFGDaxwsJZ6Iw9yBUNeqVd/gdNX33uoQWHJKgAESuA3gYDnt698b5Q2Z0CKzh0hluLRJo5a9lGQvuluXuOUTSIiyfMGSoYCEM8axykwWhcJv8NucHXS/j3AhCf7e+2n+zZvFM+SDfX+Yd8qQBsYg9jn+qOMbO8zdm0Cd0aOMQxTnaBtNmsLGFGMxG8He1mcC/Y=
+      on:
+        tags: true
+        distributions: sdist bdist_wheel
+        repo: reservoirgenomics/resgen-python
