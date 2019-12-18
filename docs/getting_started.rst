@@ -36,8 +36,8 @@ Once logged in, all activity needs to take place within a project. This is manag
 
   project = rgc.find_or_create_project('My project')
 
-Managing Data
--------------
+Adding Data
+-----------
 
 Use ``sync_dataset`` to upload data to a project. This function will check if a dataset with this filename exists in the project and uploads the local file if it doesn't. If a dataset with an equivalent filename exists in the project, this command will simply return its uuid.
 
@@ -50,6 +50,26 @@ Use ``sync_dataset`` to upload data to a project. This function will check if a 
 If the passed in dataset is a url, then it will first be downloaded and then added to the project. This may take some
 time during which the dataset will appear to be there but
 actually be incomplete.
+
+Finding Data
+------------
+
+To find data, search for it using a `ResgenConnection`. It's often useful to place them into a dictionary for future use:
+
+.. code-block:: python
+
+  datasets = rgc.find_datasets(project=project, limit=20)
+  ds_dict = dict([(d.name, d) for d in datasets])
+
+
+Finding gene annotations
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+  gene_annotations = rgc.find_datasets(
+      datatype='gene-annotations', assembly='mm9'
+  )
 
 Viewing Data
 ------------
