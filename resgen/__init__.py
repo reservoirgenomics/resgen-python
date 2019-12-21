@@ -436,7 +436,39 @@ class ResgenProject:
 
         return uuid
 
-    def save_viewconf(self, viewconf, name):
+    def sync_viewconf(self, viewconf, name):
+        """Create a viewconf if it doesn't exist and update it if it does."""
+        # try to get a viewconf with that name
+        ret = self.conn.authenticated_request(
+            requests.get, f"{self.conn.host}/api/v1/list_viewconfs/?n={name}"
+        )
+
+        if ret.status_code != 200:
+            raise UnknownConnectionException("Failed to retrieve viewconfs", ret)
+
+        content = json.loads(ret.content)
+
+        if content["count"] > 1:
+            raise ValueError(
+                "More than one viewconf with that name:", json.dumps(content, indent=2)
+            )
+
+        if content["count"] == 0:
+            return self.add_viewconf(viewconf, name)
+        else:
+            self.add_viewconf(viewconf, name)
+            self.delete_viewconf(content["results"][0]["uuid"])
+
+    def delete_viewconf(self, uuid):
+        """Delete a viewconf."""
+        ret = self.conn.authenticated_request(
+            requests.delete, f"{self.conn.host}/api/v1/viewconfs/{uuid}/"
+        )
+
+        if ret.status_code != 204:
+            raise UnknownConnectionException("Unable to delete viewconf:", ret)
+
+    def add_viewconf(self, viewconf, name):
         """Save a viewconf to this project."""
         viewconf_str = json.dumps(viewconf)
 
@@ -452,7 +484,8 @@ class ResgenProject:
             requests.post, f"{self.conn.host}/api/v1/viewconfs/", json=post_data
         )
 
-        print("ret:", ret)
+        if ret.status_code != 201:
+            raise UnknownConnectionException("Unable to add viewconf", ret)
 
     def sync_dataset(
         self,

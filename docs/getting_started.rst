@@ -58,8 +58,9 @@ To find data, search for it using a `ResgenConnection`. It's often useful to pla
 
 .. code-block:: python
 
-  datasets = rgc.find_datasets(project=project, limit=20)
-  ds_dict = dict([(d.name, d) for d in datasets])
+  datasets = dict([
+    (d.name, d) for d in rgc.find_datasets(project=project, limit=20)
+  ])
 
 
 Finding gene annotations
@@ -130,7 +131,7 @@ Interactive figures can be saved to a project using a ``higlass-python`` - gener
 
 .. code-block:: python
 
-  project.save_viewconf(viewconf, "Figure 1D")
+  project.sync_viewconf(viewconf, "Figure 1D")
 
 To export the figure as SVG or PNG, use the config menu in one of the higlass view headers.
 
