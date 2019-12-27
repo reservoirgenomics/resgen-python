@@ -191,7 +191,9 @@ class ResgenConnection:
         self.token = data["token"]
         return self.token
 
-    def find_or_create_project(self, project_name: str, private: bool = True):
+    def find_or_create_project(
+        self, project_name: str, group: str = None, private: bool = True
+    ):
         """Create a project.
 
         For now this function can only create a project for the
@@ -202,10 +204,13 @@ class ResgenConnection:
             project_name: The name of the project to create.
             private: Whether to make this a private project.
         """
+        data = {"name": project_name, "private": private, "tilesets": []}
+
+        if group:
+            data = {**data, "gruser": group}
+
         ret = self.authenticated_request(
-            requests.post,
-            f"{self.host}/api/v1/projects/",
-            json={"name": project_name, "private": private, "tilesets": []},
+            requests.post, f"{self.host}/api/v1/projects/", json=data,
         )
 
         if ret.status_code == 409 or ret.status_code == 201:
@@ -226,7 +231,7 @@ class ResgenConnection:
 
         return json.loads(ret.content)
 
-    def find_datasets(self, search_string="", project=None, limit=10, **kwargs):
+    def find_datasets(self, search_string="", project=None, limit=1000, **kwargs):
         """Search for datasets."""
         tags_line = "&".join(
             [
@@ -236,7 +241,7 @@ class ResgenConnection:
             ]
         )
 
-        url = f"{self.host}/api/v1/list_tilesets/?x=y&{tags_line}"
+        url = f"{self.host}/api/v1/list_tilesets/?limit={limit}&{tags_line}"
         if project:
             url += f"&ui={project.uuid}"
 
@@ -245,6 +250,11 @@ class ResgenConnection:
 
         if ret.status_code == 200:
             content = json.loads(ret.content)
+
+            if content["count"] > limit:
+                raise ValueError(
+                    f"More datasets available ({content['count']}) than returned ({limit}))"
+                )
 
             return [ResgenDataset(self, c) for c in content["results"]]
 
@@ -282,9 +292,19 @@ class ResgenConnection:
         ret = self.authenticated_request(requests.get, url)
 
         if ret.status_code != 200:
-            raise UnknownConnectionException(
-                "Failed to retrieve download progress", ret
-            )
+            url = f"{self.host}/api/v1/tilesets/{tileset_uuid}/"
+            ret = self.authenticated_request(requests.get, url)
+
+            if ret.status_code != 200:
+                logger.error("Download failed")
+                raise Exception(
+                    "Failed to download dataset, "
+                    + "make sure it exists at the given URL"
+                )
+            else:
+                raise UnknownConnectionException(
+                    "Failed to retrieve download progress", ret
+                )
 
         return json.loads(ret.content)
 
@@ -297,18 +317,25 @@ class ResgenProject:
         self.uuid = uuid
         self.conn = conn
 
-    def list_datasets(self, limit: int = 100):
+    def list_datasets(self, limit: int = 1000):
         """List the datasets available in this project.
 
         Returns up to a limit
         """
-        url = f"{self.conn.host}/api/v1/list_tilesets/?ui={self.uuid}&offset=0"
+        url = f"{self.conn.host}/api/v1/list_tilesets/?limit={limit}&ui={self.uuid}&offset=0"
         ret = self.conn.authenticated_request(requests.get, url)
 
         if ret.status_code != 200:
             raise UnknownConnectionException("Failed to retrieve tilesets", ret)
 
-        return json.loads(ret.content)["results"]
+        content = json.loads(ret.content)
+
+        if content["count"] > limit:
+            raise ValueError(
+                f"More datasets available ({content['count']}) than returned ({limit}))"
+            )
+
+        return content["results"]
 
         # raise NotImplementedError()
 
@@ -401,7 +428,6 @@ class ResgenProject:
         if ret.status_code != 200:
             raise UnknownConnectionException("Failed to finish uploading file", ret)
 
-        print("content:", ret.content)
         content = json.loads(ret.content)
         return content["uuid"]
 
@@ -470,6 +496,9 @@ class ResgenProject:
 
     def add_viewconf(self, viewconf, name):
         """Save a viewconf to this project."""
+        if isinstance(viewconf, hgc.ViewConf):
+            viewconf = viewconf.to_dict()
+
         viewconf_str = json.dumps(viewconf)
 
         post_data = {
@@ -494,6 +523,7 @@ class ResgenProject:
         datatype=None,
         assembly=None,
         metadata: typing.Dict[str, typing.Any] = {},
+        force_update: bool = False,
     ):
         """Check if this file already exists in this dataset.
 
@@ -533,6 +563,11 @@ class ResgenProject:
             uuid = self.add_dataset(filepath, download=download)
         else:
             uuid = matching_datasets[0]["uuid"]
+
+            if force_update:
+                new_uuid = self.add_dataset(filepath, download=download)
+                self.delete_dataset(uuid)
+                uuid = new_uuid
 
         to_update = {"tags": []}
         if "name" in metadata:

@@ -135,3 +135,25 @@ Interactive figures can be saved to a project using a ``higlass-python`` - gener
 
 To export the figure as SVG or PNG, use the config menu in one of the higlass view headers.
 
+Saving a notebook
+-----------------
+
+If running in a Jupyter notebook, it can be helpful to sync the notebook itself with the resgen project. This can be done using some cell
+magic. First some javascript:
+
+.. code-block:: python
+
+  %%javascript
+  var nb = IPython.notebook;
+  var kernel = IPython.notebook.kernel;
+  var command = "NOTEBOOK_FULL_PATH = '" + nb.notebook_path + "'";
+  kernel.execute(command);
+
+Followed by a Python sync:
+
+.. code-block:: python
+
+  import os
+  import os.path as op
+
+  project.sync_dataset(op.join(os.getcwd(), NOTEBOOK_FULL_PATH), force_update=True)
