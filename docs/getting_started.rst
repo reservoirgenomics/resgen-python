@@ -36,6 +36,12 @@ Once logged in, all activity needs to take place within a project. This is manag
 
   project = rgc.find_or_create_project('My project')
 
+Projects can also be associated with groups. To retrieve a project from a group, pass in the group name as a parameter:
+
+.. code-block:: python
+
+  project = rgc.find_or_create_project('My project', group='Group Name')
+
 Adding Data
 -----------
 

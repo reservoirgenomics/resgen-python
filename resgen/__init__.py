@@ -123,7 +123,11 @@ class ResgenDataset:
         datatype = tags_to_datatype(self.tags)
 
         if track_type is None:
-            track_type, position = hgc.datatype_to_tracktype(datatype)
+            track_type, suggested_position = hgc.datatype_to_tracktype(datatype)
+
+            if not position:
+                position = suggested_position
+
         else:
             if position is None:
                 position = hgc.tracktype_default_position(track_type)
@@ -135,7 +139,7 @@ class ResgenDataset:
 
         return Track(
             track_type,
-            position,
+            position=position,
             height=height,
             width=width,
             tileset_uuid=self.uuid,
