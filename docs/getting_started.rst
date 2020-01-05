@@ -60,7 +60,9 @@ actually be incomplete.
 Finding Data
 ------------
 
-To find data, search for it using a `ResgenConnection`. It's often useful to place them into a dictionary for future use:
+To find data, search for it using a `ResgenConnection` (find operations are
+not project specific). It's often useful to place them into a dictionary for
+future use:
 
 .. code-block:: python
 
@@ -68,6 +70,7 @@ To find data, search for it using a `ResgenConnection`. It's often useful to pla
     (d.name, d) for d in rgc.find_datasets(project=project, limit=20)
   ])
 
+In the following examples, we assume that the first result is the one we're looking for. In practice, this should be verified.
 
 Finding gene annotations
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -76,7 +79,16 @@ Finding gene annotations
 
   gene_annotations = rgc.find_datasets(
       datatype='gene-annotations', assembly='mm9'
-  )
+  )[0]
+
+Finding chromsizes
+^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+  chromsizes = rgc.find_datasets(
+    datatype='chromsizes', assembly='mm9'
+  )[0]
 
 Viewing Data
 ------------
@@ -86,19 +98,13 @@ To view a dataset, we typically need the dataset itself (see Managing Data above
 Using genomic coordinates
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In resgen, these are typically datasets with ``datatype:chromsizes``. We can select one and create a ``ChromosomeInfo`` object. Note that these operations use the ``ResgenConnection`` (``rgc``) object because they are not project-specific. We also assume that the first dataset that is returned by ``find_datasets`` is the one we want to use. In practice, this should be verified before using.
+Using the ``chromsizes`` dataset found in the previous section, we can create
+a ``ChromosomeInfo`` object to convert genomic locations to absolute positions
+assuming all the chromosomes are concatenated.
 
 .. code-block:: python
 
-  chromsizes_mm10 = rgc.find_datasets(
-    datatype='chromsizes', assembly='mm10'
-  )[0]
-  chrominfo = rgc.get_chrominfo(chromsizes_mm10)
-
-With a ``chrominfo`` object, we can convert genomic coordinates to absolute coordinates:
-
-.. code-block:: python
-
+  >> chrominfo = rgc.get_chrominfo(chromsizes)
   >> chrominfo.to_abs('chr8', 8.67e6)
   1149815680.0
 

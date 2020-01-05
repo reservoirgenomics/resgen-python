@@ -11,6 +11,7 @@ import typing
 
 import higlass.client as hgc
 from higlass import Track
+from higlass.utils import fill_filetype_and_datatype
 from resgen import aws
 
 # import resgen.utils as rgu
@@ -195,6 +196,27 @@ class ResgenConnection:
         self.token = data["token"]
         return self.token
 
+    def find_project(self, project_name: str, group: str = None):
+        """Find a project."""
+        name = group if group else self.username
+
+        ret = self.authenticated_request(
+            requests.get, f"{self.host}/api/v1/projects/?n={name}&pn={project_name}"
+        )
+
+        if ret.status_code != 200:
+            return UnknownConnectionException("Failed to fetch projects", ret)
+
+        content = json.loads(ret.content)
+
+        if content["count"] == 0:
+            raise Exception("Project not found")
+
+        if content["count"] > 1:
+            raise Exception("More than one project found:", json.dumps(content))
+
+        return ResgenProject(content["results"][0]["uuid"], self)
+
     def find_or_create_project(
         self, project_name: str, group: str = None, private: bool = True
     ):
@@ -233,7 +255,7 @@ class ResgenConnection:
         if ret.status_code != 200:
             raise UnknownConnectionException("Unable to get dataset", ret)
 
-        return json.loads(ret.content)
+        return ResgenDataset(self, json.loads(ret.content))
 
     def find_datasets(self, search_string="", project=None, limit=1000, **kwargs):
         """Search for datasets."""
@@ -326,20 +348,7 @@ class ResgenProject:
 
         Returns up to a limit
         """
-        url = f"{self.conn.host}/api/v1/list_tilesets/?limit={limit}&ui={self.uuid}&offset=0"
-        ret = self.conn.authenticated_request(requests.get, url)
-
-        if ret.status_code != 200:
-            raise UnknownConnectionException("Failed to retrieve tilesets", ret)
-
-        content = json.loads(ret.content)
-
-        if content["count"] > limit:
-            raise ValueError(
-                f"More datasets available ({content['count']}) than returned ({limit}))"
-            )
-
-        return content["results"]
+        return self.conn.find_datasets(project=self)
 
         # raise NotImplementedError()
 
@@ -453,7 +462,7 @@ class ResgenProject:
         if ret.status_code != 202:
             raise UnknownConnectionException("Failed to update dataset", ret)
 
-        return uuid
+        return self.conn.get_dataset(uuid)
 
     def delete_dataset(self, uuid: str):
         """Delete a dataset."""
@@ -552,6 +561,8 @@ class ResgenProject:
 
         datasets = self.list_datasets()
         filename = op.split(filepath)[1]
+
+        filetype, datatype = fill_filetype_and_datatype(filename, filetype, datatype)
 
         def ds_filename(dataset):
             """Return just the filename of a dataset."""
