@@ -11,7 +11,8 @@ import typing
 
 import higlass.client as hgc
 from higlass import Track
-from higlass.utils import fill_filetype_and_datatype
+
+# from higlass.utils import fill_filetype_and_datatype
 from resgen import aws
 
 # import resgen.utils as rgu
@@ -562,11 +563,11 @@ class ResgenProject:
         datasets = self.list_datasets()
         filename = op.split(filepath)[1]
 
-        filetype, datatype = fill_filetype_and_datatype(filename, filetype, datatype)
+        # filetype, datatype = fill_filetype_and_datatype(filename, filetype, datatype)
 
         def ds_filename(dataset):
             """Return just the filename of a dataset."""
-            filename = op.split(dataset["datafile"])[1]
+            filename = op.split(dataset.data["datafile"])[1]
             return filename
 
         matching_datasets = [d for d in datasets if ds_filename(d) == filename]
@@ -577,7 +578,7 @@ class ResgenProject:
         if not matching_datasets:
             uuid = self.add_dataset(filepath, download=download)
         else:
-            uuid = matching_datasets[0]["uuid"]
+            uuid = matching_datasets[0].data["uuid"]
 
             if force_update:
                 new_uuid = self.add_dataset(filepath, download=download)
