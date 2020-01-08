@@ -35,7 +35,10 @@ def test_sync_dataset_new():
 
     project.list_datasets = MagicMock()
     project.list_datasets.return_value = [
-        {"uuid": "xx", "datafile": "aws/TbUN0fR-RDW_Ob2wk5KRkg/blah.txt"}
+        rg.ResgenDataset(
+            conn=project.conn,
+            data={"uuid": "xx", "datafile": "aws/TbUN0fR-RDW_Ob2wk5KRkg/blah.txt"},
+        )
     ]
 
     # if a file with the same name exists, we shouldn't try

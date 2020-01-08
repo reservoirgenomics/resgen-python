@@ -107,8 +107,13 @@ class ResgenDataset:
         self.conn = conn
 
         self.uuid = data["uuid"]
-        self.tags = data["tags"]
-        self.name = data["name"]
+        self.tags = []
+        if "tags" in data:
+            self.tags = data["tags"]
+
+        self.name = None
+        if "name" in data:
+            self.name = data["name"]
 
     def __str__(self):
         """String representation."""
