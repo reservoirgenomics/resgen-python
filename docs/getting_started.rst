@@ -72,15 +72,6 @@ future use:
 
 In the following examples, we assume that the first result is the one we're looking for. In practice, this should be verified.
 
-Finding gene annotations
-^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. code-block:: python
-
-  gene_annotations = rgc.find_datasets(
-      datatype='gene-annotations', assembly='mm9'
-  )[0]
-
 Finding chromsizes
 ^^^^^^^^^^^^^^^^^^
 
@@ -89,11 +80,6 @@ Finding chromsizes
   chromsizes = rgc.find_datasets(
     datatype='chromsizes', assembly='mm9'
   )[0]
-
-Viewing Data
-------------
-
-To view a dataset, we typically need the dataset itself (see Managing Data above) as well as a location. Locations in genomic data typically consist of a chromosome and a position. Because HiGlass shows concatenated version of chromosomes, we need to convert genomic (chromosome, position) to "absolute" coordinates using a chromsizes file.
 
 Using genomic coordinates
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -108,7 +94,37 @@ assuming all the chromosomes are concatenated.
   >> chrominfo.to_abs('chr8', 8.67e6)
   1149815680.0
 
+We can also use a genomic range and (optionally) pad it.
+
+.. code-block:: python
+
+  >> chrominfo.to_abs_range('chr1', 0, 100, padding=0.1)
+  [-10.0, 110.0]
+
 This will come in handy when we make interactive figures centered on a particular region.
+
+Finding gene annotations
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+  gene_annotations = rgc.find_datasets(
+      datatype='gene-annotations', assembly='mm9'
+  )[0]
+
+Using gene annotation coordinates
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+  >> gene = rgc.get_gene(gene_annotations, 'CXCR3')
+  >> chrominfo.to_abs_range(gene.chrom, gene.tx_start, gene.tx_end, padding=0.1)
+  [2951868790.8, 2951871913.2]
+
+Viewing Data
+------------
+
+To view a dataset, we typically need the dataset itself (see Managing Data above) as well as a location. Locations in genomic data typically consist of a chromosome and a position. Because HiGlass shows concatenated version of chromosomes, we need to convert genomic (chromosome, position) to "absolute" coordinates using a chromsizes file.
 
 Creating interactive figures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

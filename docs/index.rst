@@ -10,3 +10,4 @@ library for interacting with the `Reservoir Genomics <https://resgen.io>`_ data 
     :glob:
 
     getting_started
+    python_api

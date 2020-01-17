@@ -68,6 +68,14 @@ class UnknownConnectionException(Exception):
         )
 
 
+class GeneAnnotation:
+    def __init__(self, gene_info):
+        self.name = gene_info["geneName"]
+        self.tx_start = gene_info["txStart"]
+        self.tx_end = gene_info["txEnd"]
+        self.chrom = gene_info["chr"]
+
+
 class ChromosomeInfo:
     def __init__(self):
         self.total_length = 0
@@ -75,9 +83,21 @@ class ChromosomeInfo:
         self.chrom_lengths = {}
         self.chrom_order = []
 
-    def to_abs(self, chrom, pos):
+    def to_abs(self, chrom: str, pos: int) -> int:
         """Calculate absolute coordinates."""
         return self.cum_chrom_lengths[chrom] + pos
+
+    def to_abs_range(
+        self, chrom: str, start: int, end: int, padding: float = 0
+    ) -> typing.Tuple[int, int]:
+        """Return a range along a chromosome with optional padding.
+        """
+        padding_abs = (end - start) * padding
+
+        return [
+            self.cum_chrom_lengths[chrom] + start - padding_abs,
+            self.cum_chrom_lengths[chrom] + end + padding_abs,
+        ]
 
 
 def get_chrominfo_from_string(chromsizes_str):
@@ -105,7 +125,7 @@ class ResgenDataset:
         self.data = data
 
         self.conn = conn
-
+        self.datafile = data["datafile"]
         self.uuid = data["uuid"]
         self.tags = []
         if "tags" in data:
@@ -122,6 +142,10 @@ class ResgenDataset:
     def __repr__(self):
         """String representation."""
         return f"{self.uuid[:8]}: {self.name}"
+
+    def update(self, **kwargs):
+        """Update this datasets metadata."""
+        return self.conn.update_dataset(self.uuid, kwargs)
 
     def hg_track(
         self, track_type=None, position=None, height=None, width=None, **options
@@ -242,7 +266,7 @@ class ResgenConnection:
             data = {**data, "gruser": group}
 
         ret = self.authenticated_request(
-            requests.post, f"{self.host}/api/v1/projects/", json=data,
+            requests.post, f"{self.host}/api/v1/projects/", json=data
         )
 
         if ret.status_code == 409 or ret.status_code == 201:
@@ -304,6 +328,19 @@ class ResgenConnection:
         suggestions = json.loads(ret.content)
         return suggestions
 
+    def get_gene(self, annotations_ds, gene_name):
+        suggestions = self.get_genes(annotations_ds, gene_name)
+        genes = [g for g in suggestions if g["geneName"].lower() == gene_name.lower()]
+
+        if not genes:
+            raise Exception(
+                f"No such gene found: {gene_name}. Suggested: {str(suggestions)}"
+            )
+        if len(genes) > 1:
+            raise Exception(f"More than one matching gene found: {str(genes)}")
+
+        return GeneAnnotation(genes[0])
+
     def get_chrominfo(self, chrominfo_ds):
         """Retrieve chromosome information from a chromsizes dataset."""
         url = f"{self.host}/api/v1/chrom-sizes/?id={chrominfo_ds.uuid}"
@@ -340,6 +377,62 @@ class ResgenConnection:
 
         return json.loads(ret.content)
 
+    def upload_to_resgen_aws(self, filepath: str, prefix: str = None) -> str:
+        """
+        Upload file to a resgen aws bucket.
+
+        Args:
+            filepath: The local filepath
+            prefix: A prefix to upload to on the S3 bucket
+
+        Returns:
+            The path within the bucket where the object is uploaded
+
+        """
+        logger.info("Getting upload credentials for file: %s", filepath)
+        url = f"{self.host}/api/v1/prepare_file_upload/"
+        if prefix:
+            url = f"{url}/?d={prefix}"
+        ret = self.authenticated_request(requests.get, url)
+
+        if ret.status_code != 200:
+            raise UnknownConnectionException("Failed to prepare file upload", ret)
+
+        content = json.loads(ret.content)
+        filename = op.split(filepath)[1]
+        directory_path = f"{content['fileDirectory']}/{filename}"
+        object_name = f"{content['uploadBucketPrefix']}/{filename}"
+
+        logger.info("Uploading to aws object: %s", object_name)
+
+        bucket = self.bucket
+        if aws.upload_file(filepath, bucket, content, object_name):
+            return directory_path
+
+        return None
+
+    def update_dataset(
+        self, uuid: str, metadata: typing.Dict[str, typing.Any]
+    ) -> ResgenDataset:
+        """Update the properties of a dataset."""
+        new_metadata = {}
+
+        if "name" in metadata:
+            new_metadata["name"] = metadata["name"]
+        if "datafile" in metadata:
+            new_metadata["datafile"] = metadata["datafile"]
+        if "tags" in metadata:
+            new_metadata["tags"] = metadata["tags"]
+
+        ret = self.authenticated_request(
+            requests.patch, f"{self.host}/api/v1/tilesets/{uuid}/", json=new_metadata
+        )
+
+        if ret.status_code != 202:
+            raise UnknownConnectionException("Failed to update dataset", ret)
+
+        return self.get_dataset(uuid)
+
 
 class ResgenProject:
     """Encapsulates a project on the resgen service."""
@@ -357,30 +450,6 @@ class ResgenProject:
         return self.conn.find_datasets(project=self)
 
         # raise NotImplementedError()
-
-    def upload_to_resgen_aws(self, filepath, prefix=None):
-        """Upload file to a resgen aws bucket."""
-        logger.info("Getting upload credentials for file: %s", filepath)
-        url = f"{self.conn.host}/api/v1/prepare_file_upload/"
-        if prefix:
-            url = f"{url}/?d={prefix}"
-        ret = self.conn.authenticated_request(requests.get, url)
-
-        if ret.status_code != 200:
-            raise UnknownConnectionException("Failed to prepare file upload", ret)
-
-        content = json.loads(ret.content)
-        filename = op.split(filepath)[1]
-        directory_path = f"{content['fileDirectory']}/{filename}"
-        object_name = f"{content['uploadBucketPrefix']}/{filename}"
-
-        logger.info("Uploading to aws object: %s", object_name)
-
-        bucket = self.conn.bucket
-        if aws.upload_file(filepath, bucket, content, object_name):
-            return directory_path
-
-        return None
 
     def add_dataset(self, filepath: str, download: bool = False):
         """Add a dataset
@@ -449,26 +518,6 @@ class ResgenProject:
 
         content = json.loads(ret.content)
         return content["uuid"]
-
-    def update_dataset(self, uuid: str, metadata: typing.Dict[str, typing.Any]):
-        """Update the properties of a dataset."""
-        new_metadata = {}
-
-        if "name" in metadata:
-            new_metadata["name"] = metadata["name"]
-        if "tags" in metadata:
-            new_metadata["tags"] = metadata["tags"]
-
-        ret = self.conn.authenticated_request(
-            requests.patch,
-            f"{self.conn.host}/api/v1/tilesets/{uuid}/",
-            json=new_metadata,
-        )
-
-        if ret.status_code != 202:
-            raise UnknownConnectionException("Failed to update dataset", ret)
-
-        return self.conn.get_dataset(uuid)
 
     def delete_dataset(self, uuid: str):
         """Delete a dataset."""
@@ -541,8 +590,8 @@ class ResgenProject:
         filetype=None,
         datatype=None,
         assembly=None,
-        metadata: typing.Dict[str, typing.Any] = {},
         force_update: bool = False,
+        **metadata,
     ):
         """Check if this file already exists in this dataset.
 
@@ -612,9 +661,9 @@ class ResgenProject:
             ]
             to_update["tags"] += [{"name": f"assembly:{assembly}"}]
 
-        return self.update_dataset(uuid, to_update)
+        return self.conn.update_dataset(uuid, to_update)
 
 
 def connect(username: str, password: str, host: str = RESGEN_HOST) -> ResgenConnection:
-    """Obtain a connection to resgen."""
+    """Open a connection to resgen."""
     return ResgenConnection(username, password, host)
