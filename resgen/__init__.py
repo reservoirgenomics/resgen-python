@@ -416,7 +416,14 @@ class ResgenConnection:
     ) -> ResgenDataset:
         """Update the properties of a dataset."""
         new_metadata = {}
+        updatable_properties = ["name", "datafile", "tags"]
 
+        for key in metadata:
+            if key not in updatable_properties:
+                raise Exception(
+                    f"Received property that can not be udpated: {key} "
+                    f"Updatable properties: {str(updatable_properties)}"
+                )
         if "name" in metadata:
             new_metadata["name"] = metadata["name"]
         if "datafile" in metadata:
