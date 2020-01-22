@@ -99,6 +99,9 @@ class ChromosomeInfo:
             self.cum_chrom_lengths[chrom] + end + padding_abs,
         ]
 
+    def to_gene_range(self, gene, padding: float = 0) -> typing.Tuple[int, int]:
+        return self.to_abs_range(gene.chrom, gene.tx_start, gene.tx_end, padding)
+
 
 def get_chrominfo_from_string(chromsizes_str):
     chrom_info = ChromosomeInfo()
@@ -265,9 +268,8 @@ class ResgenConnection:
         if group:
             data = {**data, "gruser": group}
 
-        ret = self.authenticated_request(
-            requests.post, f"{self.host}/api/v1/projects/", json=data
-        )
+        url = f"{self.host}/api/v1/projects/"
+        ret = self.authenticated_request(requests.post, url, json=data)
 
         if ret.status_code == 409 or ret.status_code == 201:
             content = json.loads(ret.content)
@@ -671,6 +673,8 @@ class ResgenProject:
         return self.conn.update_dataset(uuid, to_update)
 
 
-def connect(username: str, password: str, host: str = RESGEN_HOST) -> ResgenConnection:
+def connect(
+    username: str, password: str, host: str = RESGEN_HOST, bucket: str = RESGEN_BUCKET
+) -> ResgenConnection:
     """Open a connection to resgen."""
-    return ResgenConnection(username, password, host)
+    return ResgenConnection(username, password, host, bucket)

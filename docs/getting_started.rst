@@ -118,7 +118,7 @@ Using gene annotation coordinates
 .. code-block:: python
 
   >> gene = rgc.get_gene(gene_annotations, 'CXCR3')
-  >> chrominfo.to_abs_range(gene.chrom, gene.tx_start, gene.tx_end, padding=0.1)
+  >> chrominfo.to_gene_range(gene, padding=0.1)
   [2951868790.8, 2951871913.2]
 
 Viewing Data
