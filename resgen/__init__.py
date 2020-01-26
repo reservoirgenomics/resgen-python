@@ -10,13 +10,13 @@ import time
 import typing
 
 import higlass.client as hgc
+import higlass.utils as hgu
 from higlass import Track
 
 # from higlass.utils import fill_filetype_and_datatype
 from resgen import aws
 
 # import resgen.utils as rgu
-
 logger = logging.getLogger(__name__)
 
 __version__ = "0.2.2"
@@ -512,7 +512,7 @@ class ResgenProject:
 
             return content["uuid"]
 
-        directory_path = self.upload_to_resgen_aws(filepath)
+        directory_path = self.conn.upload_to_resgen_aws(filepath)
 
         logger.info("Adding tileset entry for uploaded file: %s", directory_path)
 
@@ -647,6 +647,13 @@ class ResgenProject:
                 new_uuid = self.add_dataset(filepath, download=download)
                 self.delete_dataset(uuid)
                 uuid = new_uuid
+
+        if not filetype:
+            filetype = hgu.infer_filetype(filepath)
+            logger.info(f"Inferred filetype: {filetype}")
+        if not datatype:
+            datatype = hgu.infer_datatype(filetype)
+            logger.info(f"Inferred datatype: {datatype}")
 
         to_update = {"tags": []}
         if "name" in metadata:
