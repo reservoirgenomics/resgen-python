@@ -1,4 +1,4 @@
 boto3==1.10.14
 requests==2.22.0
 slugid==2.0.0
-higlass-python==0.3.0
+higlass-python==0.4.0
