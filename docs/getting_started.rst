@@ -152,6 +152,18 @@ Datasets can be interactively viewed using the `higlass-python <https://docs-pyt
   display, server, viewconf = higlass.display([view1, view2])
   display
 
+Authorization Token
+^^^^^^^^^^^^^^^^^^^
+
+To view private datasets, we need to pass an authorization header to higlass:
+
+.. code-block:: python
+  display, server, viewconf = higlass.display(
+    [view1, view2],
+    auth_token=f"JWT {rgc.get_token()}"
+  )
+
+
 Saving Figures
 --------------
 
