@@ -19,14 +19,17 @@ def test_create_tags():
 def test_list_projects():
     with requests_mock.Mocker() as m:
         m.get(
-            "https://resgen.io/api/v1/projects",
+            f"{rg.RESGEN_HOST}/api/v1/projects/?n=user&limit=1000000",
             json={"results": [{"uuid": "u1", "name": "blah"}]},
         )
+        m.get(f"{rg.RESGEN_HOST}/api/v1/which_user/", json={"not": "important"})
         m.post(f"{rg.RESGEN_AUTH0_DOMAIN}/oauth/token/", json={"access_token": "xy"})
 
         rgc = rg.ResgenConnection("user", "password")
         projects = rgc.list_projects()
-        print("projects:", projects)
+
+        assert len(projects) == 1
+        assert projects[0].name == "blah"
 
 
 def test_sync_dataset_new():
