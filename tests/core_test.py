@@ -3,6 +3,7 @@ import json
 import os.path as op
 import requests
 import tempfile
+import requests_mock
 
 from unittest.mock import patch, MagicMock
 
@@ -13,6 +14,19 @@ def test_create_tags():
     tags = rg.update_tags({}, datatype="matrix")
 
     assert tags[0]["name"] == "datatype:matrix"
+
+
+def test_list_projects():
+    with requests_mock.Mocker() as m:
+        m.get(
+            "https://resgen.io/api/v1/projects",
+            json={"results": [{"uuid": "u1", "name": "blah"}]},
+        )
+        m.post(f"{rg.RESGEN_AUTH0_DOMAIN}/oauth/token/", json={"access_token": "xy"})
+
+        rgc = rg.ResgenConnection("user", "password")
+        projects = rgc.list_projects()
+        print("projects:", projects)
 
 
 def test_sync_dataset_new():

@@ -27,6 +27,8 @@ For now, we recommend storing your username and password in environment variable
     os.getenv('RESGEN_PASSWORD')
   )
 
+If the parameters to ``rg.connect`` are omitted, it will automatically try to load the username and password from the environment variables ``RESGEN_USER`` and ``RESGEN_PASSSWORD``.
+
 Projects
 --------
 

@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import os
 import os.path as op
 import requests
 import slugid
@@ -23,9 +24,14 @@ __version__ = "0.2.3"
 
 RESGEN_HOST = "https://resgen.io"
 RESGEN_BUCKET = "resgen"
-
+RESGEN_AUTH0_CLIENT_ID = "NT4NPUbrBKU3N9HVcqLP8819P7ZD91iU"
+RESGEN_AUTH0_DOMAIN = "https://auth.resgen.io"
 # RESGEN_HOST = "http://localhost:8000"
 # RESGEN_BUCKET = "resgen-test"
+
+# ridiculously large number used to effectively turn
+# off paging in requests
+MAX_LIMIT = int(1e6)
 
 
 def update_tags(current_tags, **kwargs):
@@ -199,7 +205,7 @@ class ResgenConnection:
         token = self.get_token()
 
         return func(
-            *args, **{**kwargs, "headers": {"Authorization": "JWT {}".format(token)}}
+            *args, **{**kwargs, "headers": {"Authorization": "Bearer {}".format(token)}}
         )
 
     def get_token(self) -> str:
@@ -207,15 +213,20 @@ class ResgenConnection:
         if self.token:
             ret = requests.get(
                 f"{self.host}/api/v1/which_user/",
-                headers={"Authorization": "JWT {}".format(self.token)},
+                headers={"Authorization": "Bearer {}".format(self.token)},
             )
 
             if ret.status_code == 200:
                 return self.token
 
         ret = requests.post(
-            f"{self.host}/api-token-auth/",
-            data={"username": self.username, "password": self.password},
+            f"{RESGEN_AUTH0_DOMAIN}/oauth/token/",
+            data={
+                "username": self.username,
+                "password": self.password,
+                "grant_type": "password",
+                "client_id": RESGEN_AUTH0_CLIENT_ID,
+            },
         )
 
         if ret.status_code == 400:
@@ -226,7 +237,7 @@ class ResgenConnection:
             raise UnknownConnectionException("Failed to login", ret)
 
         data = json.loads(ret.content.decode("utf8"))
-        self.token = data["token"]
+        self.token = data["access_token"]
         return self.token
 
     def find_project(self, project_name: str, group: str = None):
@@ -277,6 +288,28 @@ class ResgenConnection:
             return ResgenProject(content["uuid"], self)
 
         raise UnknownConnectionException("Failed to create project", ret)
+
+    def list_projects(self, gruser: str = None):
+        """List the projects of the connected user or the specified group.
+
+        Args:
+            gruser: The name of the user or group to list projects for.
+                Defaults to the connected user if not specified.
+        """
+        gruser = gruser if gruser is not None else self.username
+
+        # don't paginate because user's shouldn't have obscene numbers of
+        # projects
+        url = f"{self.host}/api/v1/projects/?n={gruser}&limit={MAX_LIMIT}"
+        ret = self.authenticated_request(requests.get, url)
+
+        if ret.status_code != 200:
+            return UnknownConnectionException("Failed to retrieve projects", ret)
+
+        retj = json.loads(ret.content)
+        return [
+            ResgenProject(proj["uuid"], self, proj["name"]) for proj in retj["results"]
+        ]
 
     def get_dataset(self, uuid):
         """Retrieve a dataset."""
@@ -446,10 +479,19 @@ class ResgenConnection:
 class ResgenProject:
     """Encapsulates a project on the resgen service."""
 
-    def __init__(self, uuid: str, conn: ResgenConnection):
-        """Initialize the project object."""
+    def __init__(self, uuid: str, conn: ResgenConnection, name: str = None):
+        """Initialize the project object.
+
+        Args:
+            uuid: The project's uuid on the resgen server
+            conn: The resgen connection that this project was created with
+            name: The name of the project. Not strictly necessary, but helpful
+                when stringifying this object.
+
+        """
         self.uuid = uuid
         self.conn = conn
+        self.name = name
 
     def list_datasets(self, limit: int = 1000):
         """List the datasets available in this project.
@@ -593,6 +635,14 @@ class ResgenProject:
         if ret.status_code != 201:
             raise UnknownConnectionException("Unable to add viewconf", ret)
 
+    def __str__(self):
+        """String representation."""
+        return self.__repr__
+
+    def __repr__(self):
+        """String representation."""
+        return f"{self.uuid[:8]}: {self.name}"
+
     def sync_dataset(
         self,
         filepath: str,
@@ -681,7 +731,15 @@ class ResgenProject:
 
 
 def connect(
-    username: str, password: str, host: str = RESGEN_HOST, bucket: str = RESGEN_BUCKET
+    username: str = None,
+    password: str = None,
+    host: str = RESGEN_HOST,
+    bucket: str = RESGEN_BUCKET,
 ) -> ResgenConnection:
     """Open a connection to resgen."""
+    if username is None:
+        username = os.getenv("RESGEN_USERNAME")
+    if password is None:
+        password = os.getenv("RESGEN_PASSWORD")
+
     return ResgenConnection(username, password, host, bucket)
