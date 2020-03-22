@@ -279,8 +279,6 @@ class ResgenConnection:
         if group:
             data = {**data, "gruser": group}
 
-        print("self.host:", self.host)
-
         url = f"{self.host}/api/v1/projects/"
         ret = self.authenticated_request(requests.post, url, json=data)
 
