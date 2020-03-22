@@ -48,6 +48,7 @@ setup_args = {
     "install_requires": get_requirements("requirements.txt"),
     "setup_requires": [],
     "tests_require": ["pytest"],
+    "entry_points": {"console_scripts": ["resgen = resgen.cli:cli"]}
 }
 
 setup(**setup_args)
