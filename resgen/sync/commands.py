@@ -14,10 +14,10 @@ def sync():
 @click.command()
 @click.argument('gruser')
 @click.argument('project')
-@click.argument('dataset')
-def dataset(gruser, project, dataset):
+@click.argument('datasets', nargs=-1)
+@click.option('-t', '--tag', multiple=True)
+def datasets(gruser, project, datasets, tag):
     """Upload if a file with the same name doesn't already exist."""
-    print("sync dataset")
     try:
         env_path = Path.home() / '.resgen' / 'credentials'
 
@@ -25,11 +25,16 @@ def dataset(gruser, project, dataset):
 
         rgc = rg.connect()
         project = rgc.find_or_create_project(project, group=gruser)
-        project.sync_dataset(dataset)
+
+        metadata = dict([t.split(':')[:2] for t in tag])
+
+        for dataset in datasets:
+            logger.info("Syncing dataset: %s", dataset)
+            project.sync_dataset(dataset, **metadata)
     except rg.InvalidCredentialsException:
         logger.error('Invalid credentials. Make sure that they are set in either '
             '~/.resgen/credentials or in the environment variables RESGEN_USERNAME '
             'and RESGEN_PASSWORD.')
 
 
-sync.add_command(dataset)
+sync.add_command(datasets)
