@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import os.path as op
+import re
 import requests
 import slugid
 import sys
@@ -32,6 +33,18 @@ RESGEN_AUTH0_DOMAIN = "https://auth.resgen.io"
 # ridiculously large number used to effectively turn
 # off paging in requests
 MAX_LIMIT = int(1e6)
+
+
+def parse_ucsc(hub_string):
+    # print("hub_string:", hub_string)
+
+    things = []
+    for hub_section in re.split("\n\n+", hub_string.strip()):
+        parts = [d.split(maxsplit=1) for d in hub_section.split("\n") if d[0] != "#"]
+        if parts:
+            things += [dict(parts)]
+
+    return things
 
 
 def update_tags(current_tags, **kwargs):
@@ -94,11 +107,16 @@ class ChromosomeInfo:
         return self.cum_chrom_lengths[chrom] + pos
 
     def to_abs_range(
-        self, chrom: str, start: int, end: int, padding: float = 0
+        self,
+        chrom: str,
+        start: int,
+        end: int,
+        padding: float = 0,
+        padding_abs: float = 0,
     ) -> typing.Tuple[int, int]:
         """Return a range along a chromosome with optional padding.
         """
-        padding_abs = (end - start) * padding
+        padding_abs += (end - start) * padding
 
         return [
             self.cum_chrom_lengths[chrom] + start - padding_abs,
@@ -487,6 +505,7 @@ class ResgenProject:
             conn: The resgen connection that this project was created with
             name: The name of the project. Not strictly necessary, but helpful
                 when stringifying this object.
+            try: Dry run... don't actually sync datasets
 
         """
         self.uuid = uuid
@@ -502,58 +521,75 @@ class ResgenProject:
 
         # raise NotImplementedError()
 
-    def add_dataset(self, filepath: str, download: bool = False):
-        """Add a dataset
+    def add_download_dataset(self, filepath: str, index_filename: str = None):
+        """Add a dataset by downloading it from a remote source
 
         Args:
             filepath: The filename of the dataset to add. Can also be a url.
-            download: If the filepath is a url, download it and save it to our
-                datastore. Useful for files on ftp servers or servers that do
-                not have range requests.
+            index_filename: The filename of the index for this dataset
 
         Returns:
             The uuid of the newly created dataset.
 
         """
-        if download:
-            ret = self.conn.authenticated_request(
-                requests.post,
-                f"{self.conn.host}/api/v1/tilesets/",
-                json={
-                    "datafile": filepath,
-                    "private": True,
-                    "project": self.uuid,
-                    "description": f"Downloaded from {filepath}",
-                    "download": True,
-                    "tags": [],
-                },
-            )
+        print("a")
+        body = {
+            "datafile": filepath,
+            "private": True,
+            "project": self.uuid,
+            "description": f"Downloaded from {filepath}",
+            "download": True,
+            "tags": [],
+        }
 
-            content = json.loads(ret.content)
+        if index_filename:
+            body["indexfile"] = index_filename
 
-            progress = {"downloaded": 0, "uploaded": 0, "filesize": 1}
-            while (
-                progress["downloaded"] < progress["filesize"]
-                or progress["uploaded"] < progress["filesize"]
-                or progress["downloaded"] == 0
-            ):
-                try:
-                    progress = self.conn.download_progress(content["uuid"])
-                except UnknownConnectionException:
-                    pass
-                time.sleep(0.5)
+        print("x")
+        ret = self.conn.authenticated_request(
+            requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
+        )
+        print("y", ret.content)
 
-                if progress["filesize"] > 0:
-                    percent_done = (
-                        100
-                        * (progress["downloaded"] + progress["uploaded"])
-                        / (2 * progress["filesize"])
-                    )
+        content = json.loads(ret.content)
 
-                    sys.stdout.write(f"\r {percent_done:.2f}% Complete")
+        print("z")
+        progress = {"downloaded": 0, "uploaded": 0, "filesize": 1}
+        while (
+            progress["downloaded"] < progress["filesize"]
+            or progress["uploaded"] < progress["filesize"]
+            or progress["downloaded"] == 0
+        ):
+            try:
+                progress = self.conn.download_progress(content["uuid"])
+            except UnknownConnectionException:
+                pass
+            time.sleep(0.5)
 
-            return content["uuid"]
+            if progress["filesize"] > 0:
+                percent_done = (
+                    100
+                    * (progress["downloaded"] + progress["uploaded"])
+                    / (2 * progress["filesize"])
+                )
 
+                sys.stdout.write(f"\r {percent_done:.2f}% Complete")
+
+        return content["uuid"]
+
+    def add_upload_dataset(
+        self, filepath: str, download: bool = False, index_filename: str = None
+    ):
+        """Add a dataset by uploading it to resgen
+
+        Args:
+            filepath: The filename of the dataset to add. Can also be a url.
+            index_filename: The filename of the index for this dataset
+
+        Returns:
+            The uuid of the newly created dataset.
+
+        """
         directory_path = self.conn.upload_to_resgen_aws(filepath)
 
         logger.info("Adding tileset entry for uploaded file: %s", directory_path)
@@ -569,6 +605,14 @@ class ResgenProject:
 
         content = json.loads(ret.content)
         return content["uuid"]
+
+    def add_dataset(
+        self, filepath: str, download: bool = False, index_filename: str = None
+    ):
+        if download:
+            self.add_download_dataset(filepath, index_filename)
+        else:
+            self.add_upload_dataset(filepath, index_filename)
 
     def delete_dataset(self, uuid: str):
         """Delete a dataset."""
@@ -643,12 +687,77 @@ class ResgenProject:
         """String representation."""
         return f"{self.uuid[:8]}: {self.name}"
 
+    def sync_track_hub(self, base_url, dry=False):
+        """Sync a UCSC track hub."""
+        hub_url = f"{base_url}/hub.txt"
+
+        ret = requests.get(hub_url)
+
+        content = ret.content.decode("utf8")
+        hub_info = parse_ucsc(content)[0]
+
+        genomes_url = f'{base_url}/{hub_info["genomesFile"]}'
+        print("genomes_url:", genomes_url)
+
+        ret = requests.get(genomes_url)
+
+        content = ret.content.decode("utf8")
+        genome_infos = parse_ucsc(content)
+
+        for genome_info in genome_infos:
+            self.sync_genome(base_url, genome_info, dry)
+
+    def sync_genome(self, base_url, genome_info, dry=False):
+        """Sync a genome within a track hub."""
+        track_db_url = f"{base_url}/{genome_info['trackDb']}"
+        # print("track_db_url:", track_db_url)
+        ret = requests.get(track_db_url)
+        content = ret.content.decode("utf8")
+        genome_info_path = op.split(genome_info["trackDb"])[0]
+
+        track_infos = parse_ucsc(content)
+        for track in track_infos:
+            # print("------------------")
+            # print("track:", track)
+            # print("track:", track.keys())
+            type_parts = track["type"].split()
+            track_type = type_parts[0]
+
+            if track_type in ["bigWig", "bigBed"] and track.get("bigDataUrl"):
+                big_data_path = (
+                    f"{base_url}/{genome_info_path}/{track.get('bigDataUrl')}"
+                )
+
+                if track_type == "bigWig":
+                    datatype = "vector"
+                elif track_type == "bigBed" and type_parts[1] == 12:
+                    datatype = "gene-annotations"
+                else:
+                    datatype = "bedlike"
+
+                assembly = genome_info["genome"]
+                name = track.get("shortLabel")
+                description = track.get("longLabel")
+
+                if not dry:
+                    self.sync_dataset(
+                        big_data_path,
+                        datatype=datatype,
+                        filetype=track_type.lower(),
+                        assembly=assembly,
+                        name=name,
+                        description=description,
+                    )
+                else:
+                    print(f"Syncing: {big_data_path} assembly: {assembly}")
+
     def sync_dataset(
         self,
         filepath: str,
         filetype=None,
         datatype=None,
         assembly=None,
+        index_filename=None,
         force_update: bool = False,
         **metadata,
     ):
@@ -663,7 +772,9 @@ class ResgenProject:
         If more than one dataset with this name exists, raise a ValueError.
 
         Args:
+
         """
+        print("sss")
         if (
             filepath.startswith("http://")
             or filepath.startswith("https://")
@@ -672,6 +783,8 @@ class ResgenProject:
             download = True
         else:
             download = False
+
+        print("syncing:", filepath)
 
         datasets = self.list_datasets()
         filename = op.split(filepath)[1]
@@ -689,12 +802,16 @@ class ResgenProject:
             raise ValueError("More than one matching dataset")
 
         if not matching_datasets:
-            uuid = self.add_dataset(filepath, download=download)
+            uuid = self.add_dataset(
+                filepath, download=download, index_filename=index_filename
+            )
         else:
             uuid = matching_datasets[0].data["uuid"]
 
             if force_update:
-                new_uuid = self.add_dataset(filepath, download=download)
+                new_uuid = self.add_dataset(
+                    filepath, download=download, index_filename=index_filename
+                )
                 self.delete_dataset(uuid)
                 uuid = new_uuid
 

@@ -23,11 +23,22 @@ For now, we recommend storing your username and password in environment variable
   import resgen as rg
 
   rgc = rg.connect(
-    os.getenv('RESGEN_USER'),
+    os.getenv('RESGEN_USERNAME'),
     os.getenv('RESGEN_PASSWORD')
   )
 
-If the parameters to ``rg.connect`` are omitted, it will automatically try to load the username and password from the environment variables ``RESGEN_USER`` and ``RESGEN_PASSSWORD``. It's often easiest to place these in a ``.env`` file in your projects directory.
+If the parameters to ``rg.connect`` are omitted, it will automatically try to load the username and password from the environment variables ``RESGEN_USERNAME`` and ``RESGEN_PASSSWORD``. It's often easiest to place these in a ``.env`` file. This can
+then be loaded using `python-dotenv`:
+
+.. code-block:: python
+
+  from dotenv import load_dotenv
+  import os.path as op
+  load_dotenv(op.expanduser('~/.resgen/credentials'))
+
+  import resgen as rg
+  rgc = rg.connect()
+
 
 Projects
 --------
@@ -199,3 +210,13 @@ Followed by a Python sync:
   import os.path as op
 
   project.sync_dataset(op.join(os.getcwd(), NOTEBOOK_FULL_PATH), force_update=True)
+
+
+[Experimental] Syncing a UCSC track hub
+---------------------------------------
+
+.. code-block:: python
+
+  project.sync_track_hub('http://193.147.188.155/hubs/BraLan/')
+
+
