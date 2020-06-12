@@ -430,7 +430,9 @@ class ResgenConnection:
 
         return json.loads(ret.content)
 
-    def upload_to_resgen_aws(self, filepath: str, prefix: str = None) -> str:
+    def upload_to_resgen_aws(
+        self, filepath: str, prefix: str = None, index_filepath=None
+    ) -> str:
         """
         Upload file to a resgen aws bucket.
 
@@ -453,16 +455,28 @@ class ResgenConnection:
 
         content = json.loads(ret.content)
         filename = op.split(filepath)[1]
+
         directory_path = f"{content['fileDirectory']}/{filename}"
         object_name = f"{content['uploadBucketPrefix']}/{filename}"
 
         logger.info("Uploading to aws object: %s", object_name)
+        index_directory_path = None
+        if index_filepath:
+            index_filename = op.split(index_filepath)[1]
+            index_object_name = f"{content['uploadBucketPrefix']}/{index_filename}"
+            index_directory_path = f"{content['fileDirectory']}/{index_filename}"
+            logger.info("Uploading to aws index object: %s", index_object_name)
 
         bucket = self.bucket
         if aws.upload_file(filepath, bucket, content, object_name):
-            return directory_path
+            if index_filepath:
+                if not aws.upload_file(
+                    index_filepath, bucket, content, index_object_name
+                ):
+                    return None
+            return (directory_path, index_directory_path)
 
-        return None
+        return (None, None)
 
     def update_dataset(
         self, uuid: str, metadata: typing.Dict[str, typing.Any]
@@ -521,18 +535,17 @@ class ResgenProject:
 
         # raise NotImplementedError()
 
-    def add_download_dataset(self, filepath: str, index_filename: str = None):
+    def add_download_dataset(self, filepath: str, index_filepath: str = None):
         """Add a dataset by downloading it from a remote source
 
         Args:
             filepath: The filename of the dataset to add. Can also be a url.
-            index_filename: The filename of the index for this dataset
+            index_filepath: The filename of the index for this dataset
 
         Returns:
             The uuid of the newly created dataset.
 
         """
-        print("a")
         body = {
             "datafile": filepath,
             "private": True,
@@ -542,18 +555,15 @@ class ResgenProject:
             "tags": [],
         }
 
-        if index_filename:
-            body["indexfile"] = index_filename
+        if index_filepath:
+            body["indexfile"] = index_filepath
 
-        print("x")
         ret = self.conn.authenticated_request(
             requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
         )
-        print("y", ret.content)
 
         content = json.loads(ret.content)
 
-        print("z")
         progress = {"downloaded": 0, "uploaded": 0, "filesize": 1}
         while (
             progress["downloaded"] < progress["filesize"]
@@ -577,27 +587,36 @@ class ResgenProject:
 
         return content["uuid"]
 
-    def add_upload_dataset(
-        self, filepath: str, download: bool = False, index_filename: str = None
-    ):
+    def add_upload_dataset(self, filepath: str, index_filepath: str = None):
         """Add a dataset by uploading it to resgen
 
         Args:
             filepath: The filename of the dataset to add. Can also be a url.
-            index_filename: The filename of the index for this dataset
+            index_filepath: The filename of the index for this dataset
 
         Returns:
             The uuid of the newly created dataset.
 
         """
-        directory_path = self.conn.upload_to_resgen_aws(filepath)
+        (directory_path, index_directory_path) = self.conn.upload_to_resgen_aws(
+            filepath, index_filepath=index_filepath
+        )
+
+        if not directory_path:
+            raise Exception("Error uploading to AWS")
 
         logger.info("Adding tileset entry for uploaded file: %s", directory_path)
 
+        body = {
+            "filepath": directory_path,
+            "project": self.uuid,
+        }
+
+        if index_directory_path:
+            body["indexpath"] = index_directory_path
+
         ret = self.conn.authenticated_request(
-            requests.post,
-            f"{self.conn.host}/api/v1/finish_file_upload/",
-            json={"filepath": directory_path, "project": self.uuid},
+            requests.post, f"{self.conn.host}/api/v1/finish_file_upload/", json=body,
         )
 
         if ret.status_code != 200:
@@ -607,12 +626,12 @@ class ResgenProject:
         return content["uuid"]
 
     def add_dataset(
-        self, filepath: str, download: bool = False, index_filename: str = None
+        self, filepath: str, download: bool = False, index_filepath: str = None
     ):
         if download:
-            self.add_download_dataset(filepath, index_filename)
+            return self.add_download_dataset(filepath, index_filepath)
         else:
-            self.add_upload_dataset(filepath, index_filename)
+            return self.add_upload_dataset(filepath, index_filepath)
 
     def delete_dataset(self, uuid: str):
         """Delete a dataset."""
@@ -757,7 +776,7 @@ class ResgenProject:
         filetype=None,
         datatype=None,
         assembly=None,
-        index_filename=None,
+        index_filepath=None,
         force_update: bool = False,
         **metadata,
     ):
@@ -774,7 +793,6 @@ class ResgenProject:
         Args:
 
         """
-        print("sss")
         if (
             filepath.startswith("http://")
             or filepath.startswith("https://")
@@ -783,8 +801,6 @@ class ResgenProject:
             download = True
         else:
             download = False
-
-        print("syncing:", filepath)
 
         datasets = self.list_datasets()
         filename = op.split(filepath)[1]
@@ -803,14 +819,14 @@ class ResgenProject:
 
         if not matching_datasets:
             uuid = self.add_dataset(
-                filepath, download=download, index_filename=index_filename
+                filepath, download=download, index_filepath=index_filepath
             )
         else:
             uuid = matching_datasets[0].data["uuid"]
 
             if force_update:
                 new_uuid = self.add_dataset(
-                    filepath, download=download, index_filename=index_filename
+                    filepath, download=download, index_filepath=index_filepath
                 )
                 self.delete_dataset(uuid)
                 uuid = new_uuid
