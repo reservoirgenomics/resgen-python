@@ -562,6 +562,7 @@ class ResgenProject:
             requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
         )
 
+        print("")
         content = json.loads(ret.content)
 
         progress = {"downloaded": 0, "uploaded": 0, "filesize": 1}
@@ -577,13 +578,13 @@ class ResgenProject:
             time.sleep(0.5)
 
             if progress["filesize"] > 0:
-                percent_done = (
-                    100
-                    * (progress["downloaded"] + progress["uploaded"])
-                    / (2 * progress["filesize"])
-                )
+                transferred = progress["downloaded"] + progress["uploaded"]
+                to_transfer = 2 * progress["filesize"]
+                percent_done = 100 * transferred / to_transfer
 
-                sys.stdout.write(f"\r {percent_done:.2f}% Complete")
+                sys.stdout.write(
+                    f"\r {percent_done:.3f}% Complete ({transferred} of {to_transfer})"
+                )
 
         return content["uuid"]
 
