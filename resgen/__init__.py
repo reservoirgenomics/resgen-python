@@ -493,6 +493,8 @@ class ResgenConnection:
                 )
         if "name" in metadata:
             new_metadata["name"] = metadata["name"]
+        if "description" in metadata:
+            new_metadata["description"] = metadata["description"]
         if "datafile" in metadata:
             new_metadata["datafile"] = metadata["datafile"]
         if "tags" in metadata:
