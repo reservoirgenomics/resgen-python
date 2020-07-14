@@ -21,7 +21,7 @@ from resgen import aws
 # import resgen.utils as rgu
 logger = logging.getLogger(__name__)
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 RESGEN_HOST = "https://resgen.io"
 RESGEN_BUCKET = "resgen"
