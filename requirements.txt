@@ -1,3 +1,4 @@
+certifi>=2020.06.20
 boto3==1.10.14
 click==7.1.1
 requests>=2.24.0
