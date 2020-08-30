@@ -9,5 +9,6 @@ library for interacting with the `Reservoir Genomics <https://resgen.io>`_ data 
     :hidden:
     :glob:
 
+    cli
     getting_started
     python_api

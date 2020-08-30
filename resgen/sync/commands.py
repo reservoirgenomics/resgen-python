@@ -1,9 +1,11 @@
-import click
+import getpass
 import logging
-import resgen as rg
+from pathlib import Path
 
 from dotenv import load_dotenv
-from pathlib import Path
+
+import click
+import resgen as rg
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +29,21 @@ def datasets(gruser, project, datasets, tag):
     try:
         env_path = Path.home() / ".resgen" / "credentials"
 
-        load_dotenv(env_path)
+        if env_path.exists():
+            load_dotenv(env_path)
 
-        rgc = rg.connect()
+            username = os.getenv("RESGEN_USERNAME")
+            password = os.getenv("RESGEN_PASSWORD")
+        else:
+            username = input("Username:")
+            password = getpass.getpass("Password:")
+
+        try:
+            rgc = rg.connect(username=username, password=password)
+        except rg.UnknownConnectionException:
+            logger.error("Unable to login, please check your username and password")
+            return
+
         project = rgc.find_or_create_project(project, group=gruser)
 
         metadata = dict([t.split(":")[:2] for t in tag])
