@@ -1,12 +1,12 @@
-from contextlib import ExitStack
 import json
 import os.path as op
-import requests
 import tempfile
+from contextlib import ExitStack
+from unittest.mock import MagicMock, patch
+
+import requests
+
 import requests_mock
-
-from unittest.mock import patch, MagicMock
-
 import resgen as rg
 
 
@@ -33,7 +33,7 @@ def test_list_projects():
 
 
 def test_sync_dataset_new():
-    filepath = op.join(tempfile.mkdtemp(), "/tmp/blah.txt")
+    filepath = op.join(tempfile.mkdtemp(), "blah.txt")
     with open(filepath, "w") as f:
         f.write("hello")
 
