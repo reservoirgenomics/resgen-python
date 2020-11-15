@@ -63,7 +63,8 @@ Use ``sync_dataset`` to upload data to a project. This function will check if a 
 .. code-block:: python
 
   project.sync_dataset(
-    'AdnpKO.1000.mcool',datatype="matrix", filetype="cooler", assembly="mm10"
+    'AdnpKO.1000.mcool',datatype="matrix", 
+    sync_remote=False, filetype="cooler", assembly="mm10"
   )
 
 If the passed in dataset is a url, then it will first be downloaded and then added to the project. This may take some

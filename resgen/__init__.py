@@ -4,8 +4,6 @@ import logging
 import os
 import os.path as op
 import re
-import requests
-import slugid
 import sys
 import tempfile
 import time
@@ -13,12 +11,15 @@ import typing
 
 import higlass.client as hgc
 import higlass.utils as hgu
+import requests
 from higlass import Track
 
+import slugid
 # from higlass.utils import fill_filetype_and_datatype
 from resgen import aws
 
 # import resgen.utils as rgu
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 __version__ = "0.4.6"
@@ -537,6 +538,36 @@ class ResgenProject:
 
         # raise NotImplementedError()
 
+    def add_link_dataset(self, filepath: str, index_filepath: str = None):
+        """Add a dataset by downloading it from a remote source
+
+        Args:
+            filepath: The filename of the dataset to add. Can also be a url.
+            index_filepath: The filename of the index for this dataset
+
+        Returns:
+            The uuid of the newly created dataset.
+
+        """
+        logger.info("Adding link dataset: %s", filepath)
+        body = {
+            "datafile": filepath,
+            "private": True,
+            "project": self.uuid,
+            "download": False,
+            "tags": [],
+        }
+
+        if index_filepath:
+            body["indexfile"] = index_filepath
+
+        ret = self.conn.authenticated_request(
+            requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
+        )
+        content = json.loads(ret.content)
+        print("content", content)
+        return content['uuid']
+
     def add_download_dataset(self, filepath: str, index_filepath: str = None):
         """Add a dataset by downloading it from a remote source
 
@@ -548,6 +579,7 @@ class ResgenProject:
             The uuid of the newly created dataset.
 
         """
+        logger.info("Adding download dataset: %s", filepath)
         body = {
             "datafile": filepath,
             "private": True,
@@ -601,6 +633,8 @@ class ResgenProject:
             The uuid of the newly created dataset.
 
         """
+        logger.info("Adding upload dataset: %s", filepath)
+
         (directory_path, index_directory_path) = self.conn.upload_to_resgen_aws(
             filepath, index_filepath=index_filepath
         )
@@ -629,10 +663,14 @@ class ResgenProject:
         return content["uuid"]
 
     def add_dataset(
-        self, filepath: str, download: bool = False, index_filepath: str = None
+        self, filepath: str, download: bool = False, index_filepath: str = None,
+        sync_remote: bool = False
     ):
         if download:
-            return self.add_download_dataset(filepath, index_filepath)
+            if sync_remote:
+                return self.add_download_dataset(filepath, index_filepath)
+            else:
+                return self.add_link_dataset(filepath, index_filepath)
         else:
             return self.add_upload_dataset(filepath, index_filepath)
 
@@ -764,6 +802,7 @@ class ResgenProject:
                 if not dry:
                     self.sync_dataset(
                         big_data_path,
+                        sync_remote=False,
                         datatype=datatype,
                         filetype=track_type.lower(),
                         assembly=assembly,
@@ -776,6 +815,7 @@ class ResgenProject:
     def sync_dataset(
         self,
         filepath: str,
+        sync_remote: bool = False,
         filetype=None,
         datatype=None,
         assembly=None,
@@ -796,6 +836,7 @@ class ResgenProject:
         Args:
 
         """
+        logger.info("Syncing dataset: %s", filepath)
         if (
             filepath.startswith("http://")
             or filepath.startswith("https://")
@@ -822,14 +863,17 @@ class ResgenProject:
 
         if not matching_datasets:
             uuid = self.add_dataset(
-                filepath, download=download, index_filepath=index_filepath
+                filepath, download=download, index_filepath=index_filepath,
+                sync_remote=sync_remote
             )
         else:
+            logger.info("Found dataset with the same filepath, updating metadata")
             uuid = matching_datasets[0].data["uuid"]
 
             if force_update:
                 new_uuid = self.add_dataset(
-                    filepath, download=download, index_filepath=index_filepath
+                    filepath, download=download, index_filepath=index_filepath,
+                    sync_remote=sync_remote
                 )
                 self.delete_dataset(uuid)
                 uuid = new_uuid

@@ -21,7 +21,8 @@ def sync():
 @click.argument("project")
 @click.argument("datasets", nargs=-1)
 @click.option("-t", "--tag", multiple=True)
-def datasets(gruser, project, datasets, tag):
+@click.option('--sync-remote/--no-sync-remote', default=False)
+def datasets(gruser, project, datasets, tag, sync_remote):
     """Upload if a file with the same name doesn't already exist.
 
     If files are of the form "filename1,filename2" it will be assumed
@@ -59,12 +60,12 @@ def datasets(gruser, project, datasets, tag):
                     parts[1],
                     str(metadata),
                 )
-                project.sync_dataset(parts[0], index_filepath=parts[1], **metadata)
+                project.sync_dataset(parts[0], index_filepath=parts[1], sync_remote=sync_remote, **metadata)
             else:
                 logger.info(
                     "Syncing dataset: %s with metadata: %s", parts[0], str(metadata),
                 )
-                project.sync_dataset(dataset, **metadata)
+                project.sync_dataset(dataset, sync_remote, **metadata)
     except rg.InvalidCredentialsException:
         logger.error(
             "Invalid credentials. Make sure that they are set in either "
