@@ -8,13 +8,16 @@ import sys
 import tempfile
 import time
 import typing
+from pathlib import Path
 
 import higlass.client as hgc
 import higlass.utils as hgu
 import requests
+from dotenv import load_dotenv
 from higlass import Track
 
 import slugid
+
 # from higlass.utils import fill_filetype_and_datatype
 from resgen import aws
 
@@ -566,7 +569,7 @@ class ResgenProject:
         )
         content = json.loads(ret.content)
         print("content", content)
-        return content['uuid']
+        return content["uuid"]
 
     def add_download_dataset(self, filepath: str, index_filepath: str = None):
         """Add a dataset by downloading it from a remote source
@@ -663,8 +666,11 @@ class ResgenProject:
         return content["uuid"]
 
     def add_dataset(
-        self, filepath: str, download: bool = False, index_filepath: str = None,
-        sync_remote: bool = False
+        self,
+        filepath: str,
+        download: bool = False,
+        index_filepath: str = None,
+        sync_remote: bool = False,
     ):
         if download:
             if sync_remote:
@@ -863,8 +869,10 @@ class ResgenProject:
 
         if not matching_datasets:
             uuid = self.add_dataset(
-                filepath, download=download, index_filepath=index_filepath,
-                sync_remote=sync_remote
+                filepath,
+                download=download,
+                index_filepath=index_filepath,
+                sync_remote=sync_remote,
             )
         else:
             logger.info("Found dataset with the same filepath, updating metadata")
@@ -872,8 +880,10 @@ class ResgenProject:
 
             if force_update:
                 new_uuid = self.add_dataset(
-                    filepath, download=download, index_filepath=index_filepath,
-                    sync_remote=sync_remote
+                    filepath,
+                    download=download,
+                    index_filepath=index_filepath,
+                    sync_remote=sync_remote,
                 )
                 self.delete_dataset(uuid)
                 uuid = new_uuid
@@ -917,6 +927,17 @@ def connect(
     bucket: str = RESGEN_BUCKET,
 ) -> ResgenConnection:
     """Open a connection to resgen."""
+    env_path = Path.home() / ".resgen" / "credentials"
+
+    if env_path.exists():
+        load_dotenv(env_path)
+
+        username = os.getenv("RESGEN_USERNAME")
+        password = os.getenv("RESGEN_PASSWORD")
+    else:
+        username = input("Username:")
+        password = getpass.getpass("Password:")
+
     if username is None:
         username = os.getenv("RESGEN_USERNAME")
     if password is None:

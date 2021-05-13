@@ -3,8 +3,6 @@ import logging
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 import click
 import resgen as rg
 
@@ -21,7 +19,7 @@ def sync():
 @click.argument("project")
 @click.argument("datasets", nargs=-1)
 @click.option("-t", "--tag", multiple=True)
-@click.option('--sync-remote/--no-sync-remote', default=False)
+@click.option("--sync-remote/--no-sync-remote", default=False)
 def datasets(gruser, project, datasets, tag, sync_remote):
     """Upload if a file with the same name doesn't already exist.
 
@@ -29,26 +27,16 @@ def datasets(gruser, project, datasets, tag, sync_remote):
     that filename2 is the index file for filename1.
     """
     try:
-        env_path = Path.home() / ".resgen" / "credentials"
-
-        if env_path.exists():
-            load_dotenv(env_path)
-
-            username = os.getenv("RESGEN_USERNAME")
-            password = os.getenv("RESGEN_PASSWORD")
-        else:
-            username = input("Username:")
-            password = getpass.getpass("Password:")
-
         try:
-            rgc = rg.connect(username=username, password=password)
+            rgc = rg.connect()
         except rg.UnknownConnectionException:
             logger.error("Unable to login, please check your username and password")
             return
 
         project = rgc.find_or_create_project(project, group=gruser)
 
-        metadata = dict([t.split(":")[:2] for t in tag])
+        metadata = {"tags": [{"name": t} for t in tag]}
+        # metadata = dict([t.split(":")[:2] for t in tag])
 
         for dataset in datasets:
             parts = dataset.split(",")
@@ -60,7 +48,12 @@ def datasets(gruser, project, datasets, tag, sync_remote):
                     parts[1],
                     str(metadata),
                 )
-                project.sync_dataset(parts[0], index_filepath=parts[1], sync_remote=sync_remote, **metadata)
+                project.sync_dataset(
+                    parts[0],
+                    index_filepath=parts[1],
+                    sync_remote=sync_remote,
+                    **metadata
+                )
             else:
                 logger.info(
                     "Syncing dataset: %s with metadata: %s", parts[0], str(metadata),

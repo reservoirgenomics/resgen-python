@@ -1,6 +1,6 @@
 certifi>=2020.06.20
 boto3==1.10.14
-click==7.1.1
+click>=7.1.1
 requests>=2.24.0
 slugid==2.0.0
 higlass-python>=0.4.0
