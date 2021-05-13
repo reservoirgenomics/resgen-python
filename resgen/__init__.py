@@ -1,4 +1,5 @@
 import base64
+import getpass
 import json
 import logging
 import os
@@ -10,13 +11,13 @@ import time
 import typing
 from pathlib import Path
 
-import higlass.client as hgc
-import higlass.utils as hgu
 import requests
 from dotenv import load_dotenv
-from higlass import Track
 
+import higlass.client as hgc
+import higlass.utils as hgu
 import slugid
+from higlass import Track
 
 # from higlass.utils import fill_filetype_and_datatype
 from resgen import aws
