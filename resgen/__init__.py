@@ -600,7 +600,14 @@ class ResgenProject:
             requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
         )
 
-        print("")
+        if ret.status_code != 201:
+            logger.error(
+                "Error adding download dataset. Error code: %d, Content: %s",
+                ret.status_code,
+                ret.content,
+            )
+            return
+
         content = json.loads(ret.content)
 
         progress = {"downloaded": 0, "uploaded": 0, "filesize": 1}
