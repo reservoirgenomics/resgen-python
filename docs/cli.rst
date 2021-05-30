@@ -28,9 +28,9 @@ To sync a local dataset, run the following command:
 
 .. code-block:: bash
 
-  resgen sync datasets user project filename --tags filetype:somefiletype
+  resgen sync datasets user project filename --tag filetype:somefiletype
 
 If you'd like to associate an index file with a filepath, include both filepaths separated by a comma:
 
-  resgen sync datasets user project my_file.bam,my_file.bai --tags filetype:somefiletype
+  resgen sync datasets user project my_file.bam,my_file.bai --tag filetype:somefiletype
 
