@@ -488,7 +488,7 @@ class ResgenConnection:
     ) -> ResgenDataset:
         """Update the properties of a dataset."""
         new_metadata = {}
-        updatable_properties = ["name", "datafile", "tags"]
+        updatable_properties = ["name", "datafile", "tags", "description"]
 
         for key in metadata:
             if key not in updatable_properties:

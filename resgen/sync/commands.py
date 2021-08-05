@@ -20,7 +20,8 @@ def sync():
 @click.argument("datasets", nargs=-1)
 @click.option("-t", "--tag", multiple=True)
 @click.option("--sync-remote/--no-sync-remote", default=False)
-def datasets(gruser, project, datasets, tag, sync_remote):
+@click.option("--name", default=None)
+def datasets(gruser, project, datasets, tag, sync_remote, name):
     """Upload if a file with the same name doesn't already exist.
 
     If files are of the form "filename1,filename2" it will be assumed
@@ -36,6 +37,8 @@ def datasets(gruser, project, datasets, tag, sync_remote):
         project = rgc.find_or_create_project(project, group=gruser)
 
         metadata = {"tags": [{"name": t} for t in tag]}
+        if name:
+            metadata["name"] = name
         # metadata = dict([t.split(":")[:2] for t in tag])
 
         for dataset in datasets:

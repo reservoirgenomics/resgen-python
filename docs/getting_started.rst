@@ -55,8 +55,11 @@ Projects can also be associated with groups. To retrieve a project from a group,
 
   project = rgc.find_or_create_project('My project', group='Group Name')
 
-Adding Data
------------
+Datasets
+--------
+
+Adding Datasets
+^^^^^^^^^^^^^^^
 
 Use ``sync_dataset`` to upload data to a project. This function will check if a dataset with this filename exists in the project and uploads the local file if it doesn't. If a dataset with an equivalent filename exists in the project, this command will simply return its uuid.
 
@@ -70,6 +73,26 @@ Use ``sync_dataset`` to upload data to a project. This function will check if a 
 If the passed in dataset is a url, then it will first be downloaded and then added to the project. This may take some
 time during which the dataset will appear to be there but
 actually be incomplete.
+
+Updating metadata
+^^^^^^^^^^^^^^^^^
+
+Metadata can be passed in piecewise and only the fields that
+are included will be updated:
+
+.. code-block:: python
+
+  import resgen
+
+  rgc = resgen.connect()
+  rgc.update_dataset('daTaSetUuiD',
+                     {
+                      "name": "newname",
+                      "description": "newdescription",
+                      "tags": [
+                          {"name": "some:tag"},
+                          {"name": "another:tag"}
+                      ]})
 
 Finding Data
 ------------
