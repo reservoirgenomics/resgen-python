@@ -55,6 +55,13 @@ Projects can also be associated with groups. To retrieve a project from a group,
 
   project = rgc.find_or_create_project('My project', group='Group Name')
 
+Projects are private by default. To create a public project,
+pass in the `private=False` parameter:
+
+.. code-block:: python
+
+  project = rgc.find_or_create_project("My project", private=False)
+
 Datasets
 --------
 
@@ -104,7 +111,7 @@ future use:
 .. code-block:: python
 
   datasets = dict([
-    (d.name, d) for d in rgc.find_datasets(project=project, limit=20)
+    (d.name, d) for d in rgc.find_datasets("search_string",project=project, limit=20)
   ])
 
 In the following examples, we assume that the first result is the one we're looking for. In practice, this should be verified.

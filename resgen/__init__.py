@@ -345,7 +345,9 @@ class ResgenConnection:
 
         return ResgenDataset(self, json.loads(ret.content))
 
-    def find_datasets(self, search_string="", project=None, limit=1000, **kwargs):
+    def find_datasets(
+        self, search_string="", project=None, limit=1000, datafile=None, **kwargs
+    ):
         """Search for datasets."""
         tags_line = "&".join(
             [
@@ -356,8 +358,11 @@ class ResgenConnection:
         )
 
         url = f"{self.host}/api/v1/list_tilesets/?limit={limit}&{tags_line}"
+
         if project:
             url += f"&ui={project.uuid}"
+        if datafile:
+            url += f"&df={datafile}"
 
         url += f"&ac={search_string}&limit={limit}"
         ret = self.authenticated_request(requests.get, url)
@@ -543,7 +548,7 @@ class ResgenProject:
         # raise NotImplementedError()
 
     def add_link_dataset(self, filepath: str, index_filepath: str = None):
-        """Add a dataset by downloading it from a remote source
+        """Add a remote dataset
 
         Args:
             filepath: The filename of the dataset to add. Can also be a url.
@@ -860,8 +865,12 @@ class ResgenProject:
         else:
             download = False
 
-        datasets = self.list_datasets()
         filename = op.split(filepath)[1]
+        try:
+            datasets = self.conn.find_datasets(project=self, datafile=filename)
+        except UnknownConnectionException:
+            logger.info("No such datasets found")
+            datasets = []
 
         # filetype, datatype = fill_filetype_and_datatype(filename, filetype, datatype)
 
@@ -873,7 +882,9 @@ class ResgenProject:
         matching_datasets = [d for d in datasets if ds_filename(d) == filename]
 
         if len(matching_datasets) > 1:
-            raise ValueError("More than one matching dataset")
+            raise ValueError(
+                f"More than one matching dataset: {str(matching_datasets)}"
+            )
 
         if not matching_datasets:
             uuid = self.add_dataset(
