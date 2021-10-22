@@ -6,6 +6,10 @@
 pip install resgen-python
 ```
 
+## Documentation
+
+Documentation can be found at [docs-python.resgen.io](https://docs-python.resgen.io)
+
 ## Testing
 
 ```
