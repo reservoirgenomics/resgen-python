@@ -297,20 +297,25 @@ class ResgenConnection:
             project_name: The name of the project to create.
             private: Whether to make this a private project.
         """
-        data = {"name": project_name, "private": private, "tilesets": []}
+
+        url = f"{self.host}/api/v1/projects/?pn={project_name}"
 
         if group:
-            data = {**data, "gruser": group}
+            url += f"&n={group}"
+        ret = self.authenticated_request(requests.get, url)
 
-        url = f"{self.host}/api/v1/projects/"
-        ret = self.authenticated_request(requests.post, url, json=data)
+        if ret.status_code == 404 or ret.json()["count"] == 0:
+            url = f"{self.host}/api/v1/projects/"
+            data = {"name": project_name, "private": private, "tilesets": []}
+            if group:
+                data = {**data, "gruser": group}
 
-        if ret.status_code == 409 or ret.status_code == 201:
-            content = json.loads(ret.content)
+            ret = self.authenticated_request(requests.post, url, json=data)
+            if ret.status_code == 409 or ret.status_code == 201:
+                return ResgenProject(ret.json()["uuid"], self)
+            raise UnknownConnectionException("Failed to create project", ret)
 
-            return ResgenProject(content["uuid"], self)
-
-        raise UnknownConnectionException("Failed to create project", ret)
+        return ResgenProject(ret.json()["results"][0]["uuid"], self)
 
     def list_projects(self, gruser: str = None):
         """List the projects of the connected user or the specified group.
