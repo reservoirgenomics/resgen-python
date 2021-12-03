@@ -5,8 +5,8 @@ from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 import requests
-
 import requests_mock
+
 import resgen as rg
 
 
@@ -50,8 +50,8 @@ def test_sync_dataset_new():
     project.sync_dataset(filepath)
     assert project.add_dataset.called
 
-    project.list_datasets = MagicMock()
-    project.list_datasets.return_value = [
+    project.conn.find_datasets = MagicMock()
+    project.conn.find_datasets.return_value = [
         rg.ResgenDataset(
             conn=project.conn,
             data={"uuid": "xx", "datafile": "aws/TbUN0fR-RDW_Ob2wk5KRkg/blah.txt"},

@@ -579,7 +579,6 @@ class ResgenProject:
             requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
         )
         content = json.loads(ret.content)
-        print("content", content)
         return content["uuid"]
 
     def add_download_dataset(self, filepath: str, index_filepath: str = None):
@@ -781,8 +780,6 @@ class ResgenProject:
         hub_info = parse_ucsc(content)[0]
 
         genomes_url = f'{base_url}/{hub_info["genomesFile"]}'
-        print("genomes_url:", genomes_url)
-
         ret = requests.get(genomes_url)
 
         content = ret.content.decode("utf8")
