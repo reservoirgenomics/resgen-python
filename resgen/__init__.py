@@ -372,6 +372,7 @@ class ResgenConnection:
         url += f"&ac={search_string}&limit={limit}"
         ret = self.authenticated_request(requests.get, url)
 
+        print("url:", url)
         if ret.status_code == 200:
             content = json.loads(ret.content)
 
@@ -842,6 +843,7 @@ class ResgenProject:
         assembly=None,
         index_filepath=None,
         force_update: bool = False,
+        sync_full_path: bool = False,
         **metadata,
     ):
         """Check if this file already exists in this dataset.
@@ -867,7 +869,13 @@ class ResgenProject:
         else:
             download = False
 
-        filename = op.split(filepath)[1]
+        if not sync_full_path:
+            filename = op.split(filepath)[1]
+        else:
+            filename = filepath
+
+        logger.info("Filename used to sync: %s", filename)
+
         try:
             datasets = self.conn.find_datasets(project=self, datafile=filename)
         except UnknownConnectionException:
@@ -878,7 +886,10 @@ class ResgenProject:
 
         def ds_filename(dataset):
             """Return just the filename of a dataset."""
-            filename = op.split(dataset.data["datafile"])[1]
+            if not sync_full_path:
+                filename = op.split(dataset.data["datafile"])[1]
+            else:
+                return dataset.data["datafile"]
             return filename
 
         matching_datasets = [d for d in datasets if ds_filename(d) == filename]
