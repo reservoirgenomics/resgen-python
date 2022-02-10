@@ -1,3 +1,7 @@
+## v0.5.4
+
+- Added a function for getting a download url for a dataset
+
 ## v0.5.3
 
 - Added the --sync-full-path option to sync datasets so that a full

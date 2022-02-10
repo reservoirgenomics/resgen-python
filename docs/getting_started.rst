@@ -116,6 +116,19 @@ future use:
 
 In the following examples, we assume that the first result is the one we're looking for. In practice, this should be verified.
 
+Downloading Data
+----------------
+
+Once you've found a dataset, you can retrieve a download link:
+
+.. code-block:: python
+
+  datasets[0].download_link()
+
+  import urllib.request
+  urllib.request.urlretrieve(ret['url'], '/tmp/my.file')
+
+
 Finding chromsizes
 ^^^^^^^^^^^^^^^^^^
 
@@ -241,13 +254,5 @@ Followed by a Python sync:
   import os.path as op
 
   project.sync_dataset(op.join(os.getcwd(), NOTEBOOK_FULL_PATH), force_update=True)
-
-
-[Experimental] Syncing a UCSC track hub
----------------------------------------
-
-.. code-block:: python
-
-  project.sync_track_hub('http://193.147.188.155/hubs/BraLan/')
 
 

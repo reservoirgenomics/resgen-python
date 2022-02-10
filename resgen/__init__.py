@@ -179,6 +179,17 @@ class ResgenDataset:
         """Update this datasets metadata."""
         return self.conn.update_dataset(self.uuid, kwargs)
 
+    def download_link(self):
+        """Get a download link for this dataset."""
+        ret = self.conn.authenticated_request(
+            requests.get, f"{self.conn.host}/download/?d={self.uuid}"
+        )
+
+        if ret.status_code != 200:
+            return UnknownConnectionException("Failed to get download link", ret)
+
+        return ret.json()
+
     def hg_track(
         self, track_type=None, position=None, height=None, width=None, **options
     ):
