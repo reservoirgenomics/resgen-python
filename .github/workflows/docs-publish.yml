@@ -23,3 +23,4 @@ jobs:
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
           aws_bucket: docs-python.resgen.io
           source_dir: docs/_build/html
+          destination_dir: ""
