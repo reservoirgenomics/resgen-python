@@ -22,11 +22,16 @@ def sync():
 @click.option("--sync-remote/--no-sync-remote", default=False)
 @click.option("--name", default=None)
 @click.option("--sync-full-path/--no-sync-full-path", default=False)
-def datasets(gruser, project, datasets, tag, sync_remote, name, sync_full_path):
+@click.option("-f", "--force-update", default=False)
+def datasets(gruser, project, datasets, tag, sync_remote, name, sync_full_path,
+             force_update):
     """Upload if a file with the same name doesn't already exist.
 
     If files are of the form "filename1,filename2" it will be assumed
     that filename2 is the index file for filename1.
+
+    If -f/--force-update is specified, files will be uploaded even if they already exist
+    in the project.
     """
     try:
         try:
@@ -57,13 +62,22 @@ def datasets(gruser, project, datasets, tag, sync_remote, name, sync_full_path):
                     index_filepath=parts[1],
                     sync_remote=sync_remote,
                     sync_full_path=sync_full_path,
-                    **metadata
+                    force_update=force_update,
+                    **metadata,
                 )
             else:
                 logger.info(
-                    "Syncing dataset: %s with metadata: %s", parts[0], str(metadata),
+                    "Syncing dataset: %s with metadata: %s",
+                    parts[0],
+                    str(metadata),
                 )
-                project.sync_dataset(dataset, sync_remote, sync_full_path=sync_full_path, **metadata)
+                project.sync_dataset(
+                    dataset,
+                    sync_remote,
+                    sync_full_path=sync_full_path,
+                    force_update=force_update,
+                    **metadata
+                )
     except rg.InvalidCredentialsException:
         logger.error(
             "Invalid credentials. Make sure that they are set in either "
