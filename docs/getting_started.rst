@@ -43,7 +43,24 @@ then be loaded using `python-dotenv`:
 Projects
 --------
 
-Once logged in, all activity needs to take place within a project. This is managed by a ``ResgenProject`` object. The ``find_or_create_project`` function checks to see if a project exists for this user and returns it if it does or creates it if it doesn't.
+Once logged in, all activity needs to take place within a project. This is managed by a ``ResgenProject`` object.
+
+Finding an existing project
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If a project already exists, you can look it up using the ``find_project`` function:
+
+.. code-block:: python
+
+  project = rgc.find_project('My project', gruser='Group or username')
+
+The ``gruser`` parameter stands for group or user. It is used to look up projects in
+namespace that does not belong to the person logged in to the ResgenConnection object.
+
+Creating a new project
+^^^^^^^^^^^^^^^^^^^^^^
+
+The ``find_or_create_project`` function checks to see if a project exists for this user and returns it if it does or creates it if it doesn't.
 
 .. code-block:: python
 

@@ -14,13 +14,14 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-import higlass.client as hgc
-import higlass.utils as hgu
+from higlass.api import Viewconf
+
 import slugid
-from higlass import Track
+from higlass import track
 
 # from higlass.utils import fill_filetype_and_datatype
 from resgen import aws
+from resgen.utils import tracktype_default_position, datatype_to_tracktype, infer_filetype, infer_datatype
 
 # import resgen.utils as rgu
 logging.basicConfig(level=logging.INFO)
@@ -196,27 +197,30 @@ class ResgenDataset:
         """Create a higlass track from this dataset."""
         datatype = tags_to_datatype(self.tags)
 
-        if track_type is None:
-            track_type, suggested_position = hgc.datatype_to_tracktype(datatype)
+        print("datatype", datatype)
 
+        if track_type is None:
+            track_type, suggested_position = datatype_to_tracktype(datatype)
+
+            print("track_type", track_type)
             if not position:
                 position = suggested_position
 
         else:
             if position is None:
-                position = hgc.tracktype_default_position(track_type)
+                position = tracktype_default_position(track_type)
             if position is None:
                 raise ValueError(
                     f"No default position for track type: {track_type}. "
                     "Please specify a position"
                 )
 
-        return Track(
+        return track(
             track_type,
             position=position,
             height=height,
             width=width,
-            tileset_uuid=self.uuid,
+            tilesetUid=self.uuid,
             server=f"{self.conn.host}/api/v1",
             options=options,
         )
@@ -274,12 +278,13 @@ class ResgenConnection:
         self.token = data["access_token"]
         return self.token
 
-    def find_project(self, project_name: str, group: str = None):
+    def find_project(self, project_name: str, gruser: str = None):
         """Find a project."""
-        name = group if group else self.username
-
+        name = gruser or self.username
+        url = f"{self.host}/api/v1/projects/?n={name}&pn={project_name}&is=true"
+        print("url:", url)
         ret = self.authenticated_request(
-            requests.get, f"{self.host}/api/v1/projects/?n={name}&pn={project_name}"
+            requests.get, url
         )
 
         if ret.status_code != 200:
@@ -298,7 +303,7 @@ class ResgenConnection:
     def find_or_create_project(
         self, project_name: str, group: str = None, private: bool = True
     ):
-        """Create a project.
+        """Find or create a project.
 
         For now this function can only create a project for the
         logged in user. If a project with the same name exists, do
@@ -754,7 +759,7 @@ class ResgenProject:
 
     def add_viewconf(self, viewconf, name):
         """Save a viewconf to this project."""
-        if isinstance(viewconf, hgc.ViewConf):
+        if isinstance(viewconf, Viewconf):
             viewconf = viewconf.to_dict()
 
         viewconf_str = json.dumps(viewconf)
@@ -803,16 +808,13 @@ class ResgenProject:
     def sync_genome(self, base_url, genome_info, dry=False):
         """Sync a genome within a track hub."""
         track_db_url = f"{base_url}/{genome_info['trackDb']}"
-        # print("track_db_url:", track_db_url)
+
         ret = requests.get(track_db_url)
         content = ret.content.decode("utf8")
         genome_info_path = op.split(genome_info["trackDb"])[0]
 
         track_infos = parse_ucsc(content)
         for track in track_infos:
-            # print("------------------")
-            # print("track:", track)
-            # print("track:", track.keys())
             type_parts = track["type"].split()
             track_type = type_parts[0]
 
@@ -932,10 +934,10 @@ class ResgenProject:
                 uuid = new_uuid
 
         if not filetype:
-            filetype = hgu.infer_filetype(filepath)
+            filetype = infer_filetype(filepath)
             logger.info(f"Inferred filetype: {filetype}")
         if not datatype:
-            datatype = hgu.infer_datatype(filetype)
+            datatype = infer_datatype(filetype)
             logger.info(f"Inferred datatype: {datatype}")
 
         to_update = {"tags": []}
