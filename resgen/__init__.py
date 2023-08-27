@@ -27,7 +27,7 @@ from resgen.utils import tracktype_default_position, datatype_to_tracktype, infe
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-__version__ = "0.5.5"
+__version__ = "0.6.0"
 
 RESGEN_HOST = "https://resgen.io"
 RESGEN_BUCKET = "resgen"
