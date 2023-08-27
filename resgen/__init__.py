@@ -197,12 +197,9 @@ class ResgenDataset:
         """Create a higlass track from this dataset."""
         datatype = tags_to_datatype(self.tags)
 
-        print("datatype", datatype)
-
         if track_type is None:
             track_type, suggested_position = datatype_to_tracktype(datatype)
 
-            print("track_type", track_type)
             if not position:
                 position = suggested_position
 
@@ -215,15 +212,14 @@ class ResgenDataset:
                     "Please specify a position"
                 )
 
-        return track(
+        return (track(
             track_type,
-            position=position,
             height=height,
             width=width,
             tilesetUid=self.uuid,
             server=f"{self.conn.host}/api/v1",
             options=options,
-        )
+        ), position)
 
 
 class ResgenConnection:
@@ -282,7 +278,6 @@ class ResgenConnection:
         """Find a project."""
         name = gruser or self.username
         url = f"{self.host}/api/v1/projects/?n={name}&pn={project_name}&is=true"
-        print("url:", url)
         ret = self.authenticated_request(
             requests.get, url
         )
@@ -388,7 +383,6 @@ class ResgenConnection:
         url += f"&ac={search_string}&limit={limit}"
         ret = self.authenticated_request(requests.get, url)
 
-        print("url:", url)
         if ret.status_code == 200:
             content = json.loads(ret.content)
 
@@ -760,7 +754,7 @@ class ResgenProject:
     def add_viewconf(self, viewconf, name):
         """Save a viewconf to this project."""
         if isinstance(viewconf, Viewconf):
-            viewconf = viewconf.to_dict()
+            viewconf = viewconf.dict()
 
         viewconf_str = json.dumps(viewconf)
 
