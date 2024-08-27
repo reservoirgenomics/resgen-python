@@ -10,6 +10,7 @@ import tempfile
 import time
 import typing
 from pathlib import Path
+from functools import lru_cache
 
 import requests
 from dotenv import load_dotenv
@@ -161,6 +162,7 @@ class ResgenDataset:
         self.datafile = data["datafile"]
         self.uuid = data["uuid"]
         self.tags = []
+        self.projectUuid = data['project']
         if "tags" in data:
             self.tags = data["tags"]
 
@@ -350,6 +352,7 @@ class ResgenConnection:
             ResgenProject(proj["uuid"], self, proj["name"]) for proj in retj["results"]
         ]
 
+    @lru_cache
     def get_dataset(self, uuid):
         """Retrieve a dataset."""
         url = f"{self.host}/api/v1/tilesets/{uuid}/"

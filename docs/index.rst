@@ -11,5 +11,6 @@ library for interacting with the `Reservoir Genomics <https://resgen.io>`_ data 
 
     cli
     getting_started
+    tileset_ops
     python_api
 

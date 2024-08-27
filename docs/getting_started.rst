@@ -12,6 +12,8 @@ Install using pip:
 
     pip install resgen-python
 
+.. _logging-in:
+
 Logging in
 ----------
 
@@ -94,9 +96,11 @@ Use ``sync_dataset`` to upload data to a project. This function will check if a 
     sync_remote=False, filetype="cooler", assembly="mm10"
   )
 
-If the passed in dataset is a url, then it will first be downloaded and then added to the project. This may take some
+If the passed in dataset is a url and ``sync_remote`` is set to ``True``, then it will first be
+downloaded and then added to the project. This may take some
 time during which the dataset will appear to be there but
-actually be incomplete.
+actually be incomplete. If ``sync_remote`` is set to false, the dataset will be added as a
+remote dataset.
 
 Updating metadata
 ^^^^^^^^^^^^^^^^^
