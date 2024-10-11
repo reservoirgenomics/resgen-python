@@ -5,3 +5,4 @@ requests>=2.24.0
 slugid==2.0.0
 higlass-python>=0.4.0
 python-dotenv==0.12.0
+fire
