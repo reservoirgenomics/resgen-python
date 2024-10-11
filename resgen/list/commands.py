@@ -1,7 +1,4 @@
-import getpass
 import logging
-import os
-from pathlib import Path
 
 import click
 import resgen as rg
