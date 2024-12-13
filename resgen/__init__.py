@@ -161,6 +161,7 @@ class ResgenDataset:
         self.conn = conn
         self.datafile = data["datafile"]
         self.uuid = data["uuid"]
+        self.indexfile = data.get('indexfile')
         self.tags = []
         self.containing_folder = data.get('containing_folder')
         if "tags" in data:
@@ -541,8 +542,8 @@ class ResgenConnection:
     ) -> ResgenDataset:
         """Update the properties of a dataset."""
         new_metadata = {}
-        updatable_properties = ["name", "datafile", "tags", "description"]
-
+        updatable_properties = ["name", "datafile", "tags", "description", "indexfile"]
+        print('metadata', metadata)
         for key in metadata:
             if key not in updatable_properties:
                 raise Exception(
@@ -557,6 +558,8 @@ class ResgenConnection:
             new_metadata["datafile"] = metadata["datafile"]
         if "tags" in metadata:
             new_metadata["tags"] = metadata["tags"]
+        if "indexfile" in metadata:
+            new_metadata["indexfile"] = metadata["indexfile"]
 
         ret = self.authenticated_request(
             requests.patch, f"{self.host}/api/v1/tilesets/{uuid}/", json=new_metadata
@@ -615,27 +618,10 @@ class ResgenProject:
         logger.info("Added folder: %s", content['uuid'])
 
         return content["uuid"]
+
     
 
-    def add_local_dataset(self, datafile, name, parent, private=False):
-        """Add a dataset on the local resgen instance.
-        
-        This function should only be used with a local deployment.
-        It will have undefined behavior when used with the hosted resgen
-        deployment."""
-        body = {
-            "datafile": datafile,
-            "containing_folder": parent,
-            "name": name,
-            "is_folder": False,
-            "private": private,
-            "project": self.uuid,
-            "download": False,
-            "tags": []
-        }
-    
-
-    def add_link_dataset(self, filepath: str, index_filepath: str = None):
+    def add_link_dataset(self, filepath: str, index_filepath: str = None, name:str = None, parent: str = None, private: bool = True):
         """Add a remote dataset
 
         Args:
@@ -646,10 +632,14 @@ class ResgenProject:
             The uuid of the newly created dataset.
 
         """
-        logger.info("Adding link dataset: %s", filepath)
+        name = name if name else filepath.split('/')[-1]
+
+        logger.info("Adding link dataset: %s parent: %s", filepath, parent)
         body = {
             "datafile": filepath,
-            "private": True,
+            "name": name,
+            "containing_folder": parent,
+            "private": private,
             "project": self.uuid,
             "download": False,
             "tags": [],
