@@ -162,7 +162,7 @@ class ResgenDataset:
         self.datafile = data["datafile"]
         self.uuid = data["uuid"]
         self.tags = []
-        self.projectUuid = data['project']
+        self.containing_folder = data.get('containing_folder')
         if "tags" in data:
             self.tags = data["tags"]
 
@@ -227,11 +227,12 @@ class ResgenDataset:
 class ResgenConnection:
     """Connection to the resgen server."""
 
-    def __init__(self, username, password, host=RESGEN_HOST, bucket=RESGEN_BUCKET):
+    def __init__(self, username, password, host=RESGEN_HOST, bucket=RESGEN_BUCKET, auth_provider='auth0'):
         self.username = username
         self.password = password
         self.host = host
         self.bucket = bucket
+        self.auth_provider = auth_provider
 
         self.token = None
         self.token = self.get_token()
@@ -254,7 +255,34 @@ class ResgenConnection:
 
             if ret.status_code == 200:
                 return self.token
+        
+        if self.auth_provider == 'auth0':
+            return self.get_auth0_token()
+        else:
+            return self.get_local_token()
+        
+    def get_local_token(self) -> str:
+        ret = requests.post(
+            f"{self.host}/token/",
+            data={
+                "username": self.username,
+                "password": self.password,
+            },
+        )
 
+        if ret.status_code == 400:
+            raise InvalidCredentialsException(
+                "The provided username and password are incorrect"
+            )
+        elif ret.status_code != 200:
+            raise UnknownConnectionException("Failed to login", ret)
+
+        data = json.loads(ret.content.decode("utf8"))
+        self.token = data["access"]
+        return self.token
+    
+
+    def get_auth0_token(self) -> str:
         ret = requests.post(
             f"{RESGEN_AUTH0_DOMAIN}/oauth/token/",
             data={
@@ -316,8 +344,9 @@ class ResgenConnection:
         if group:
             url += f"&n={group}"
         ret = self.authenticated_request(requests.get, url)
+        retj = ret.json()
 
-        if ret.status_code == 404 or ret.json()["count"] == 0:
+        if ret.status_code == 404 or retj["count"] == 0:
             url = f"{self.host}/api/v1/projects/"
             data = {"name": project_name, "private": private, "tilesets": []}
             if group:
@@ -565,6 +594,46 @@ class ResgenProject:
         return self.conn.find_datasets(project=self)
 
         # raise NotImplementedError()
+
+    def add_folder_dataset(self, folder_name: str, parent: str):
+        """Add a folder dataset."""
+        logger.info("Adding folder dataset. Name: %s parent: %s", folder_name, parent)
+
+        body = {
+            "datafile": folder_name,
+            "containing_folder": parent,
+            "is_folder": True,
+            "private": False,
+            "project": self.uuid,
+            "download": False,
+            "tags": [],
+        }
+        ret = self.conn.authenticated_request(
+            requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
+        )
+        content = json.loads(ret.content)
+        logger.info("Added folder: %s", content['uuid'])
+
+        return content["uuid"]
+    
+
+    def add_local_dataset(self, datafile, name, parent, private=False):
+        """Add a dataset on the local resgen instance.
+        
+        This function should only be used with a local deployment.
+        It will have undefined behavior when used with the hosted resgen
+        deployment."""
+        body = {
+            "datafile": datafile,
+            "containing_folder": parent,
+            "name": name,
+            "is_folder": False,
+            "private": private,
+            "project": self.uuid,
+            "download": False,
+            "tags": []
+        }
+    
 
     def add_link_dataset(self, filepath: str, index_filepath: str = None):
         """Add a remote dataset
@@ -844,6 +913,17 @@ class ResgenProject:
                 else:
                     print(f"Syncing: {big_data_path} assembly: {assembly}")
 
+    def add_or_get_folder(self, name, parent):
+        """Either get an existing folder or add one if none exists that matches the parameters."""
+        print("aogf")
+        datasets = self.conn.find_datasets(project=self)
+
+        for ds in datasets:
+            if ds.datafile == name and ds.containing_folder == parent:
+                return ds.uuid
+            
+        return self.add_folder_dataset(name, parent)
+
     def sync_dataset(
         self,
         filepath: str,
@@ -967,9 +1047,13 @@ def connect(
     password: str = None,
     host: str = RESGEN_HOST,
     bucket: str = RESGEN_BUCKET,
+    auth_provider: str = 'auth0'
 ) -> ResgenConnection:
     """Open a connection to resgen."""
     env_path = Path.home() / ".resgen" / "credentials"
+
+    if username and password:
+        return ResgenConnection(username, password, host, bucket, auth_provider=auth_provider)
 
     if env_path.exists():
         load_dotenv(env_path)
@@ -985,4 +1069,4 @@ def connect(
     if password is None:
         password = os.getenv("RESGEN_PASSWORD")
 
-    return ResgenConnection(username, password, host, bucket)
+    return ResgenConnection(username, password, host, bucket, auth_provider=auth_provider)
