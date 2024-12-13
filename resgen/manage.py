@@ -30,7 +30,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - RESGEN_API_HOST=/
+      - RESGEN_API_HOST={api_host}
       - RESGEN_USER_SQLITE_DIR=/data/
       - RESGEN_AWS_BUCKET=resgen-test
       - RESGEN_AWS_BUCKET_PREFIX=tmp
@@ -90,7 +90,8 @@ def start(directory, port):
             tmp_directory=tmp_directory,
             port=port,
             uid=os.getuid(),
-            gid=os.getgid()
+            gid=os.getgid(),
+            api_host=f"http://localhost:{port}/"
         )
 
         f.write(compose_text)
@@ -194,7 +195,21 @@ def get_local_datasets(directory):
                 "name": file,
                 "is_folder": False,
             }]
+
+    # We'll go through and associate indexfiles
+    by_fullpath = dict([(d['fullpath'], d) for d in local_datasets])
+    to_remove = set()
+
+    for d in local_datasets:
+        for index_extension in ['bai']:
+            index_path = f"{d['fullpath']}.{index_extension}"
+            if index_path in by_fullpath:
+                d['index_filepath'] = index_path
+                to_remove.add(index_path)
+
+    local_datasets = [d for d in local_datasets if d['fullpath'] not in to_remove]
     
+    print(local_datasets)
     return local_datasets
 
 def get_remote_datasets(project):
@@ -215,7 +230,8 @@ def get_remote_datasets(project):
         ds_json = {
             "uuid": ds.uuid,
             "name": ds.name,
-            "fullname": ds.name
+            "fullname": ds.name,
+            'index_filepath': ds.indexfile
         }
 
         while ds.containing_folder:
@@ -228,6 +244,71 @@ def get_remote_datasets(project):
         remote_datasets += [ds_json]
 
     return dict([(ds['fullname'], ds) for ds in remote_datasets])
+
+
+def add_and_update_local_datasets(project, local_datasets, remote_datasets):
+    """Add local datasets to remote if they're missing."""
+    def get_parent_uuid(dataset):
+        parent_dir = op.split(dataset['fullpath'])[0]
+        parent = remote_datasets.get(
+            parent_dir
+        )
+        if parent:
+            parent = parent['uuid']
+        
+        return parent
+    
+    for dataset in local_datasets:
+        if dataset['fullpath'] in remote_datasets:
+            # see if we have to update it
+            rd = remote_datasets[dataset['fullpath']]
+            if rd.get('index_filepath') != dataset.get('index_filepath'):
+                logger.info("Updating indexfile for %s with %s", dataset['fullpath'], dataset.get('indexfile'))
+                project.conn.update_dataset(rd['uuid'], {
+                    "indexfile": dataset.get('index_filepath')
+                })
+        else:
+            if dataset['is_folder']:
+                print("need to add", dataset['fullpath'])
+
+
+                parent = get_parent_uuid(dataset)
+                uuid = project.add_folder_dataset(
+                    folder_name=dataset['name'],
+                    parent=parent
+                )
+                remote_datasets[dataset['fullpath']] = {
+                    'uuid': uuid,
+                    "is_folder": True
+                }
+            else:
+                # Handle adding a file dataset
+                parent = get_parent_uuid(dataset)
+                logger.info("Adding dataset name: %s datafile: %s, parent: %s", dataset['name'], dataset['fullpath'], parent)
+
+                uuid = project.add_link_dataset(
+                    filepath=dataset['fullpath'],
+                    index_filepath=dataset.get('index_filepath'),
+                    name=dataset['name'],
+                    parent=parent,
+                    private=False
+                )
+
+                logger.info("Added with uuid: %s", uuid)
+                remote_datasets[dataset['fullpath']] = {
+                    'uuid': uuid,
+                    "is_folder": False
+                }
+
+def remote_stale_remote_datasets(project, local_datasets, remote_datasets):
+    """Remove any remote datasets which are not reflected in the local
+    datasets."""
+    local_fullpath = dict([(d['fullpath'], d) for d in local_datasets])
+
+    for remote_fullpath, ds in remote_datasets.items():
+        if remote_fullpath not in local_fullpath:
+            logger.info("Removing stale remote dataset: %s", remote_fullpath)
+            project.delete_dataset(ds['uuid'])
 
 @manage.command()
 @click.argument('directory')
@@ -257,52 +338,14 @@ def sync_datasets(directory):
 
     import json
     print(json.dumps(local_datasets, indent=2))
-    print(json.dumps(remote_datasets, indent=2))
 
-    def get_parent_uuid(dataset):
-        parent_dir = op.split(dataset['fullpath'])[0]
-        parent = remote_datasets.get(
-            parent_dir
-        )
-        if parent:
-            parent = parent['uuid']
-        
-        return parent
-    
-    for dataset in local_datasets:
-        if dataset['fullpath'] not in remote_datasets:
-            if dataset['is_folder']:
-                print("need to add", dataset['fullpath'])
+    add_and_update_local_datasets(project, local_datasets, remote_datasets)
+    remote_stale_remote_datasets(project, local_datasets, remote_datasets)
+    # print(json.dumps(remote_datasets, indent=2))
 
 
-                parent = get_parent_uuid(dataset)
-                uuid = project.add_folder_dataset(
-                    folder_name=dataset['name'],
-                    parent=parent
-                )
-                remote_datasets[dataset['fullpath']] = {
-                    'uuid': uuid,
-                    "is_folder": True
-                }
-            else:
-                # Handle adding a file dataset
 
-                parent = get_parent_uuid(dataset)
-                logger.info("Adding dataset name: %s datafile: %s, parent: %s", dataset['name'], dataset['fullpath'], parent)
-
-                uuid = project.add_local_dataset(
-                    datafile=dataset['fullpath'],
-                    name=dataset['name'],
-                    parent=parent
-                )
-
-                logger.info("Added with uuid: %s", uuid)
-                remote_datasets[dataset['fullpath']] = {
-                    'uuid': uuid,
-                    "is_folder": False
-                }
-
-                print(remote_datasets)
+                # print(remote_datasets)
             # split the dataset up into path parts and add each one with
             # its corresponding containing_folder uuid
             # if dataset['is_folder']:
