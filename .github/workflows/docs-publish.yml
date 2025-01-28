@@ -2,7 +2,7 @@ name: Upload to S3
 
 on:
   push:
-    branches: [master]
+    branches: [main]
 
 jobs:
   upload:
