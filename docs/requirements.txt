@@ -2,3 +2,4 @@ markupsafe==2.0.1
 Sphinx==1.6.5
 sphinx-autobuild
 sphinx-js
+resgen-python
