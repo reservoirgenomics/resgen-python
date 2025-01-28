@@ -27,14 +27,17 @@ services:
     volumes:
       - {data_directory}:/data
       - {tmp_directory}:/tmp
+      - {media_directory}:/media
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - RESGEN_API_HOST={api_host}
+      - RESGEN_LOCAL_VIEWS_DIR=/data/viewconfs/
       - RESGEN_USER_SQLITE_DIR=/data/
       - RESGEN_AWS_BUCKET=resgen-test
       - RESGEN_AWS_BUCKET_PREFIX=tmp
       - RESGEN_AWS_BUCKET_MOUNT_POINT=aws
+      - RESGEN_MEDIA_ROOT=/media/
       - SITE_URL=localhost
       - CELERY_BROKER=rabbitmq:5672
       - RESGEN_LOCAL_JWT_AUTH=True
@@ -76,6 +79,7 @@ def start(directory, port):
 
     data_directory = join(directory, '.resgen/data')
     tmp_directory = join(directory, '.resgen/tmp')
+    media_directory = directory
 
     # Make sure the data and tmp directories exist
     # We may want to check that they have the right user permissions
@@ -88,6 +92,7 @@ def start(directory, port):
         compose_text = START_TEMPLATE.format(
             data_directory=data_directory,
             tmp_directory=tmp_directory,
+            media_directory=media_directory,
             port=port,
             uid=os.getuid(),
             gid=os.getgid(),
@@ -201,11 +206,14 @@ def get_local_datasets(directory):
     to_remove = set()
 
     for d in local_datasets:
-        for index_extension in ['bai']:
+        for index_extension in ['bai', 'fai']:
             index_path = f"{d['fullpath']}.{index_extension}"
             if index_path in by_fullpath:
                 d['index_filepath'] = index_path
-                to_remove.add(index_path)
+                if index_extension in ['.bai']:
+                    # We have no use for .bai files outside of as indexes
+                    # .fai files we can add as chromsizes
+                    to_remove.add(index_path)
 
     local_datasets = [d for d in local_datasets if d['fullpath'] not in to_remove]
     
