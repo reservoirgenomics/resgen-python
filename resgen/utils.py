@@ -28,7 +28,7 @@ _track_default_position = {
 }
 
 
-_datatype_default_track = {
+datatype_default_track = {
     "2d-rectangle-domains": "2d-rectangle-domains",
     "bedlike": "bedlike",
     "chromsizes": "horizontal-chromosome-labels",
@@ -78,7 +78,7 @@ def datatype_to_tracktype(datatype):
         A track type (e.g. 'heatmap') and position (e.g. 'top')
 
     """
-    track_type = _datatype_default_track.get(datatype, None)
+    track_type = datatype_default_track.get(datatype, None)
     position = _track_default_position.get(track_type, None)
     return track_type, position
 
