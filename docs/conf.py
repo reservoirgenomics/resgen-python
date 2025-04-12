@@ -58,7 +58,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "Resgen"
-copyright = "2017-2019 Reservoir Genomics Inc."
+copyright = "2017-2025 Reservoir Genomics"
 author = "Reservoir Genomics"
 
 # The version info for the project you're documenting, acts as replacement for

@@ -202,7 +202,10 @@ Using gene annotation coordinates
 Viewing Data
 ------------
 
-To view a dataset, we typically need the dataset itself (see Managing Data above) as well as a location. Locations in genomic data typically consist of a chromosome and a position. Because HiGlass shows concatenated version of chromosomes, we need to convert genomic (chromosome, position) to "absolute" coordinates using a chromsizes file.
+To view a dataset, we typically need the dataset itself (see Managing Data above)
+as well as a location. Locations in genomic data typically consist of a chromosome and a position.
+Because HiGlass shows a concatenated version of chromosomes, we need to convert genomic (chromosome, position)
+to "absolute" coordinates using a chromsizes file.
 
 Creating interactive figures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
