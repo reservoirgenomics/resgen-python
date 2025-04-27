@@ -42,6 +42,7 @@ services:
       - CELERY_BROKER=rabbitmq:5672
       - RESGEN_LOCAL_JWT_AUTH=True
       - SITE_URL=localhost:{port}
+      - RESGEN_LICENSE_JWT={resgen_license_jwt}
     container_name: "resgen-server-container"
 """
 
@@ -59,8 +60,9 @@ def manage():
 
 @manage.command()
 @click.argument('directory')
+@click.option('--license', type=str)
 @click.option('--port', type=int, default=1807)
-def start(directory, port):
+def start(directory, license, port):
     """Start a resgen instance in a directory.
     
     If there's an existing resgen DB in the directory, it will be used.
@@ -69,8 +71,17 @@ def start(directory, port):
     in the directory.
 
     :param directory: The directory to start and serve from
+    :param license: The path to the license file to use
     :param port: The port to execute on
     """
+    if not license:
+        logger.warning("No license file provided, default to guest license. "
+                    "This will limit the use of this software to a maximum of 20 files "
+                    "per project.")
+        license_text=""
+    else:
+        license_text = open(license, 'r').read()
+
     compose_file = get_compose_file(directory)
     compose_directory = op.dirname(compose_file)
 
@@ -96,7 +107,8 @@ def start(directory, port):
             port=port,
             uid=os.getuid(),
             gid=os.getgid(),
-            api_host=f"http://localhost:{port}/"
+            api_host=f"http://localhost:{port}/",
+            resgen_license_jwt=license_text
         )
 
         f.write(compose_text)
@@ -278,7 +290,6 @@ def add_and_update_local_datasets(project, local_datasets, remote_datasets):
         else:
             if dataset['is_folder']:
                 print("need to add", dataset['fullpath'])
-
 
                 parent = get_parent_uuid(dataset)
                 uuid = project.add_folder_dataset(
