@@ -5,9 +5,13 @@ from pathlib import Path
 
 import click
 import resgen as rg
+import os.path as op
+
+from resgen.sync.folders import (
+    get_local_datasets, get_remote_datasets, add_and_update_local_datasets, remove_stale_remote_datasets
+)
 
 logger = logging.getLogger(__name__)
-
 
 @click.group()
 def sync():
@@ -85,5 +89,43 @@ def datasets(gruser, project, datasets, tag, sync_remote, name, sync_full_path,
             "and RESGEN_PASSWORD."
         )
 
+@click.command()
+@click.argument("gruser")
+@click.argument("project")
+@click.argument('directory')
+@click.option("-r", "--remove-old", default=False)
+def folder(gruser, project, directory, remove_old):
+    """Make sure all the datasets in the directory are represented in the
+    resgen project. The resgen project will be named after the directory's
+    basename.
+    
+    :param remove-old: Remove datasets which are no longer present in the
+        directory. Defaults to false to prevent unwanted deletions.
+    """
+    try:
+        try:
+            rgc = rg.connect()
+        except rg.UnknownConnectionException:
+            logger.error("Unable to login, please check your username and password")
+            return
+        
+        directory = op.abspath(directory)
 
+        project = rgc.find_or_create_project(project, gruser=gruser)
+        local_datasets = get_local_datasets(directory)
+        remote_datasets = get_remote_datasets(project)
+
+        add_and_update_local_datasets(project, local_datasets, remote_datasets)
+
+        if remove_old:
+            remove_stale_remote_datasets(project, local_datasets, remote_datasets)
+
+    except rg.InvalidCredentialsException:
+        logger.error(
+            "Invalid credentials. Make sure that they are set in either "
+            "~/.resgen/credentials or in the environment variables RESGEN_USERNAME "
+            "and RESGEN_PASSWORD."
+        )
+    
 sync.add_command(datasets)
+sync.add_command(folder)
