@@ -7,7 +7,7 @@ import click
 import resgen as rg
 import os.path as op
 
-from resgen.sync.folders import (
+from resgen.sync.folder import (
     get_local_datasets, get_remote_datasets, add_and_update_local_datasets, remove_stale_remote_datasets
 )
 
@@ -96,8 +96,7 @@ def datasets(gruser, project, datasets, tag, sync_remote, name, sync_full_path,
 @click.option("-r", "--remove-old", default=False)
 def folder(gruser, project, directory, remove_old):
     """Make sure all the datasets in the directory are represented in the
-    resgen project. The resgen project will be named after the directory's
-    basename.
+    resgen project.
     
     :param remove-old: Remove datasets which are no longer present in the
         directory. Defaults to false to prevent unwanted deletions.
@@ -111,14 +110,14 @@ def folder(gruser, project, directory, remove_old):
         
         directory = op.abspath(directory)
 
-        project = rgc.find_or_create_project(project, gruser=gruser)
+        project = rgc.find_or_create_project(project, group=gruser)
         local_datasets = get_local_datasets(directory)
         remote_datasets = get_remote_datasets(project)
 
-        add_and_update_local_datasets(project, local_datasets, remote_datasets)
+        add_and_update_local_datasets(project, local_datasets, remote_datasets, base_directory=directory, link=False)
 
         if remove_old:
-            remove_stale_remote_datasets(project, local_datasets, remote_datasets)
+            remove_stale_remote_datasets(project, local_datasets, remote_datasets, base_directory=directory, link=False)
 
     except rg.InvalidCredentialsException:
         logger.error(

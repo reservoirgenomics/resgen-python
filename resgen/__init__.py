@@ -162,7 +162,10 @@ class ResgenDataset:
         self.datafile = data["datafile"]
         self.uuid = data["uuid"]
         self.tags = []
-        self.projectUuid = data['project']
+        self.project_name = data['project_name']
+        self.indexfile = data.get('indexfile')
+        self.containing_folder = data.get('containing_folder')
+        
         if "tags" in data:
             self.tags = data["tags"]
 
@@ -566,7 +569,28 @@ class ResgenProject:
 
         # raise NotImplementedError()
 
-    def add_link_dataset(self, filepath: str, index_filepath: str = None):
+    def add_folder_dataset(self, folder_name: str, parent: str):
+        """Add a folder dataset."""
+        logger.info("Adding folder dataset. Name: %s parent: %s", folder_name, parent)
+
+        body = {
+            "datafile": folder_name,
+            "containing_folder": parent,
+            "is_folder": True,
+            "private": False,
+            "project": self.uuid,
+            "download": False,
+            "tags": [],
+        }
+        ret = self.conn.authenticated_request(
+            requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
+        )
+        content = json.loads(ret.content)
+        logger.info("Added folder: %s", content['uuid'])
+
+        return content["uuid"]
+    
+    def add_link_dataset(self, filepath: str, index_filepath: str = None, name:str = None, parent: str = None, private: bool = True):
         """Add a remote dataset
 
         Args:
@@ -577,10 +601,14 @@ class ResgenProject:
             The uuid of the newly created dataset.
 
         """
-        logger.info("Adding link dataset: %s", filepath)
+        name = name if name else filepath.split('/')[-1]
+
+        logger.info("Adding link dataset: %s parent: %s", filepath, parent)
         body = {
             "datafile": filepath,
-            "private": True,
+            "name": name,
+            "containing_folder": parent,
+            "private": private,
             "project": self.uuid,
             "download": False,
             "tags": [],
@@ -656,18 +684,24 @@ class ResgenProject:
 
         return content["uuid"]
 
-    def add_upload_dataset(self, filepath: str, index_filepath: str = None):
+    def add_upload_dataset(self, filepath: str, index_filepath: str = None, name:str = None,
+                         parent: str = None, private: bool = True):
         """Add a dataset by uploading it to resgen
 
         Args:
             filepath: The filename of the dataset to add. Can also be a url.
             index_filepath: The filename of the index for this dataset
+            name: The name to add to this dataset
+            parent: The directory to put this dataset under
+            private: Whether to add this as a private dataset
 
         Returns:
             The uuid of the newly created dataset.
 
         """
         logger.info("Adding upload dataset: %s", filepath)
+
+        name = name if name else filepath.split('/')[-1]
 
         (directory_path, index_directory_path) = self.conn.upload_to_resgen_aws(
             filepath, index_filepath=index_filepath
@@ -681,6 +715,9 @@ class ResgenProject:
         body = {
             "filepath": directory_path,
             "project": self.uuid,
+            "private": private,
+            "containing_folder": parent,
+            "name": name
         }
 
         if index_directory_path:

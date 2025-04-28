@@ -76,7 +76,7 @@ def get_remote_datasets(project):
 
         while ds.containing_folder:
             ds1 = ds_by_uid[ds.containing_folder]
-            filename = join(ds1.name, filename)
+            filename = op.join(ds1.name, filename)
 
             ds = ds1
 
@@ -96,8 +96,14 @@ def remove_stale_remote_datasets(project, local_datasets, remote_datasets):
             project.delete_dataset(ds['uuid'])
 
 
-def add_and_update_local_datasets(project, local_datasets, remote_datasets):
-    """Add local datasets to remote if they're missing."""
+def add_and_update_local_datasets(project, local_datasets, remote_datasets, base_directory, link=True):
+    """Add local datasets to remote if they're missing.
+    
+    :param base_directory: The base directory to which all local filepaths are
+        relative.
+    :param link: Add as links rather than uploading. Useful if running a local
+        version of resgen.
+    """
     def get_parent_uuid(dataset):
         parent_dir = op.split(dataset['fullpath'])[0]
         parent = remote_datasets.get(
@@ -135,13 +141,22 @@ def add_and_update_local_datasets(project, local_datasets, remote_datasets):
                 parent = get_parent_uuid(dataset)
                 logger.info("Adding dataset name: %s datafile: %s, parent: %s", dataset['name'], dataset['fullpath'], parent)
 
-                uuid = project.add_link_dataset(
-                    filepath=dataset['fullpath'],
-                    index_filepath=dataset.get('index_filepath'),
-                    name=dataset['name'],
-                    parent=parent,
-                    private=False
-                )
+                if link:
+                    uuid = project.add_link_dataset(
+                        filepath=dataset['fullpath'],
+                        index_filepath=dataset.get('index_filepath'),
+                        name=dataset['name'],
+                        parent=parent,
+                        private=False
+                    )
+                else:
+                    uuid = project.add_upload_dataset(
+                        filepath=op.join(base_directory, dataset['fullpath']),
+                        index_filepath=dataset.get('index_filepath') and op.join(base_directory, dataset.get('index_filepath')),
+                        name=dataset['name'],
+                        parent=parent,
+                        private=False
+                    )
 
                 logger.info("Added with uuid: %s", uuid)
                 remote_datasets[dataset['fullpath']] = {
