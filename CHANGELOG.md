@@ -1,3 +1,7 @@
+## v0.7.0
+
+- Sync folders to projects
+
 ## v0.5.4
 
 - Added a function for getting a download url for a dataset
