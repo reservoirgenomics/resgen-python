@@ -1,3 +1,3 @@
 #!/bin/bash
 
-sphinx-autobuild -b html . _build/html --port 8062 --ignore "*.swp"
+sphinx-autobuild -b html . _build/html --port 8063 --ignore "*.swp"
