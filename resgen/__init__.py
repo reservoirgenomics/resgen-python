@@ -162,7 +162,7 @@ class ResgenDataset:
         self.datafile = data["datafile"]
         self.uuid = data["uuid"]
         self.tags = []
-        self.project_name = data['project_name']
+        self.project_name = data.get('project_name')
         self.indexfile = data.get('indexfile')
         self.containing_folder = data.get('containing_folder')
         
