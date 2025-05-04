@@ -1,3 +1,11 @@
+## v0.7.2
+
+- Improve error handling in find_or_create_project
+
+## v0.7.1
+
+- Don't assume project_name is in return from projects list
+
 ## v0.7.0
 
 - Sync folders to projects
