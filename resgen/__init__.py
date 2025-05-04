@@ -320,7 +320,17 @@ class ResgenConnection:
             url += f"&n={group}"
         ret = self.authenticated_request(requests.get, url)
 
-        if ret.status_code == 404 or ret.json()["count"] == 0:
+        not_found = False
+        
+        if ret.status_code == 404:
+            not_found = True
+        
+        retj = ret.json()
+
+        if ('count' in retj and retj["count"] == 0):
+            not_found = True
+
+        if not_found:
             url = f"{self.host}/api/v1/projects/"
             data = {"name": project_name, "private": private, "tilesets": []}
             if group:
@@ -331,7 +341,10 @@ class ResgenConnection:
                 return ResgenProject(ret.json()["uuid"], self)
             raise UnknownConnectionException("Failed to create project", ret)
 
-        return ResgenProject(ret.json()["results"][0]["uuid"], self)
+        if not 'results' in retj:
+            raise UnknownConnectionException("No results in project", ret)
+
+        return ResgenProject(retj["results"][0]["uuid"], self)
 
     def list_projects(self, gruser: str = None):
         """List the projects of the connected user or the specified group.
