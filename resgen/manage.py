@@ -48,6 +48,12 @@ services:
 
 LOGGED_SERVICES = ['nginx', 'uwsgi', 'celery']
 
+def get_license_text(base_directory: str) -> str:
+    """Locate the license file in the resgen metadata
+    in a base directory."""
+    with open(join(base_directory, '.resgen/license.jwt'), 'r') as f:
+        return f.read()
+
 def get_compose_file(base_directory):
     """Locate the docker compose file in the resgen metadata
     in a base directory."""
@@ -87,6 +93,11 @@ def start(directory, license, port):
     data_directory = join(directory, '.resgen/data')
     tmp_directory = join(directory, '.resgen/tmp')
     media_directory = directory
+
+    # Store the license in the resgen directory so that we don't
+    # have to pass it in to the e.g. sync command
+    with open(join(directory, '.resgen/license.jwt'), 'w') as f:
+        f.write(license_text)
 
     # Make sure the data and tmp directories exist
     # We may want to check that they have the right user permissions
@@ -350,38 +361,6 @@ def sync_datasets(directory):
     local_datasets = get_local_datasets(directory)
     remote_datasets = get_remote_datasets(project)
 
-
-    import json
-    print(json.dumps(local_datasets, indent=2))
-
-    add_and_update_local_datasets(project, local_datasets, remote_datasets)
+    add_and_update_local_datasets(project, local_datasets, remote_datasets, base_directory=directory, link=True)
     remote_stale_remote_datasets(project, local_datasets, remote_datasets)
-    # print(json.dumps(remote_datasets, indent=2))
-
-
-
-                # print(remote_datasets)
-            # split the dataset up into path parts and add each one with
-            # its corresponding containing_folder uuid
-            # if dataset['is_folder']:
-                # project.add_folder_dataset(dataset['name'])
-
-
-# Single instance
-
-# All paths relative to project (base execution path)
-#
-# Get list of datasets from server
-#  Resolve directory structure using containing_folders
-# Get list of datasets from local directory
-#  Group files with indexes
-#
-# Do we need functionality to add one dataset as an index
-# to another?
-#
-#
-
-# The problem with hosting one instance is that we would
-# have to have on media directory at the root folder and
-# that may present some security issues
 
