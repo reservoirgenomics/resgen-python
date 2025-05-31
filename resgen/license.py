@@ -55,7 +55,7 @@ def guest_license():
     return license_info
 
 
-def get_license(filepath: Optional[str]) -> LicenseInfo:
+def get_license(filepath: Optional[str] = None) -> LicenseInfo:
     """Get the current license. If a filepath is specified, try to load it from there.
     If no filename is specified then try to load from the RESGEN_LICENSE_JWT
     env var. If there's no license there then return a guest license."""
