@@ -23,7 +23,7 @@ services:
       - "redis"
     command: /var/task/start_service.sh
     image: "resgen-server"
-    platform: "linux/amd64"
+    platform: "{platform}"
     ports:
       - {port}:80
     volumes:
@@ -70,7 +70,8 @@ def manage():
 @click.argument('directory')
 @click.option('--license', type=str, help="The path to the license file to use")
 @click.option('--port', type=int, default=1807, help="The port to execute on")
-def start(directory, license, port):
+@click.option('--platform', default='linux/amd64')
+def start(directory, license, port, platform):
     """Start a resgen instance in a directory.
     
     If there's an existing resgen DB in the directory, it will be used.
@@ -117,7 +118,8 @@ def start(directory, license, port):
             uid=os.getuid(),
             gid=os.getgid(),
             api_host=f"http://localhost:{port}/",
-            resgen_license_jwt=license_text
+            resgen_license_jwt=license_text,
+            platform=platform
         )
 
         f.write(compose_text)
