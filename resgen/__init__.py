@@ -230,11 +230,12 @@ class ResgenDataset:
 class ResgenConnection:
     """Connection to the resgen server."""
 
-    def __init__(self, username, password, host=RESGEN_HOST, bucket=RESGEN_BUCKET):
+    def __init__(self, username, password, host=RESGEN_HOST, bucket=RESGEN_BUCKET, auth_provider='auth0'):
         self.username = username
         self.password = password
         self.host = host
         self.bucket = bucket
+        self.auth_provider = auth_provider
 
         self.token = None
         self.token = self.get_token()
@@ -257,7 +258,34 @@ class ResgenConnection:
 
             if ret.status_code == 200:
                 return self.token
+        
+        if self.auth_provider == 'auth0':
+            return self.get_auth0_token()
+        else:
+            return self.get_local_token()
+        
+    def get_local_token(self) -> str:
+        ret = requests.post(
+            f"{self.host}/token/",
+            data={
+                "username": self.username,
+                "password": self.password,
+            },
+        )
 
+        if ret.status_code == 400:
+            raise InvalidCredentialsException(
+                "The provided username and password are incorrect"
+            )
+        elif ret.status_code != 200:
+            raise UnknownConnectionException("Failed to login", ret)
+
+        data = json.loads(ret.content.decode("utf8"))
+        self.token = data["access"]
+        return self.token
+    
+
+    def get_auth0_token(self) -> str:
         ret = requests.post(
             f"{RESGEN_AUTH0_DOMAIN}/oauth/token/",
             data={
@@ -528,7 +556,7 @@ class ResgenConnection:
     ) -> ResgenDataset:
         """Update the properties of a dataset."""
         new_metadata = {}
-        updatable_properties = ["name", "datafile", "tags", "description"]
+        updatable_properties = ["name", "datafile", "tags", "description", "indexfile"]
 
         for key in metadata:
             if key not in updatable_properties:
@@ -544,6 +572,8 @@ class ResgenConnection:
             new_metadata["datafile"] = metadata["datafile"]
         if "tags" in metadata:
             new_metadata["tags"] = metadata["tags"]
+        if "indexfile" in metadata:
+            new_metadata["indexfile"] = metadata["indexfile"]
 
         ret = self.authenticated_request(
             requests.patch, f"{self.host}/api/v1/tilesets/{uuid}/", json=new_metadata
@@ -894,6 +924,17 @@ class ResgenProject:
                 else:
                     print(f"Syncing: {big_data_path} assembly: {assembly}")
 
+    def add_or_get_folder(self, name, parent):
+        """Either get an existing folder or add one if none exists that matches the parameters."""
+        print("aogf")
+        datasets = self.conn.find_datasets(project=self)
+
+        for ds in datasets:
+            if ds.datafile == name and ds.containing_folder == parent:
+                return ds.uuid
+
+        return self.add_folder_dataset(name, parent)
+
     def sync_dataset(
         self,
         filepath: str,
@@ -1017,9 +1058,13 @@ def connect(
     password: str = None,
     host: str = RESGEN_HOST,
     bucket: str = RESGEN_BUCKET,
+    auth_provider: str = 'auth0'
 ) -> ResgenConnection:
     """Open a connection to resgen."""
     env_path = Path.home() / ".resgen" / "credentials"
+
+    if username and password:
+        return ResgenConnection(username, password, host, bucket, auth_provider=auth_provider)
 
     if env_path.exists():
         load_dotenv(env_path)
@@ -1035,4 +1080,4 @@ def connect(
     if password is None:
         password = os.getenv("RESGEN_PASSWORD")
 
-    return ResgenConnection(username, password, host, bucket)
+    return ResgenConnection(username, password, host, bucket, auth_provider=auth_provider)

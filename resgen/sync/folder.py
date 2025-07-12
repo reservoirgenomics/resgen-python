@@ -125,8 +125,6 @@ def add_and_update_local_datasets(project, local_datasets, remote_datasets, base
                 })
         else:
             if dataset['is_folder']:
-                print("need to add", dataset['fullpath'])
-
                 parent = get_parent_uuid(dataset)
                 uuid = project.add_folder_dataset(
                     folder_name=dataset['name'],
@@ -140,7 +138,6 @@ def add_and_update_local_datasets(project, local_datasets, remote_datasets, base
                 # Handle adding a file dataset
                 parent = get_parent_uuid(dataset)
                 logger.info("Adding dataset name: %s datafile: %s, parent: %s", dataset['name'], dataset['fullpath'], parent)
-
                 if link:
                     uuid = project.add_link_dataset(
                         filepath=dataset['fullpath'],
