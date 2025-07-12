@@ -61,6 +61,12 @@ def get_license(filepath: Optional[str] = None) -> LicenseInfo:
     env var. If there's no license there then return a guest license."""
     if filepath:
         with open(filepath, "r") as f:
+            license_txt = f.read()
+
+            if not license_txt:
+                # Empty license file
+                return guest_license()
+            
             return license_info(f.read())
 
     LICENSE_JWT = os.environ.get("RESGEN_LICENSE_JWT")

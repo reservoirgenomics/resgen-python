@@ -1,14 +1,13 @@
 from os.path import join
-from tempfile import TemporaryDirectory
 from subprocess import run
 import click
 import os.path as op
 import os
-from typing import Literal
 import logging
 import resgen as rg
 from resgen.sync.folder import get_local_datasets, get_remote_datasets, add_and_update_local_datasets, remove_stale_remote_datasets
 from resgen.license import get_license, datasets_allowed, LicenseError
+from slugid import nice
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ services:
     depends_on:
       - "redis"
     command: /var/task/start_service.sh
-    image: "resgen-server"
+    image: "{image}"
     platform: "{platform}"
     ports:
       - {port}:80
@@ -34,6 +33,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - RESGEN_API_HOST={api_host}
+      - RESGEN_SECRET_KEY={resgen_secret_key}
       - RESGEN_LOCAL_VIEWS_DIR=/data/viewconfs/
       - RESGEN_USER_SQLITE_DIR=/data/
       - RESGEN_AWS_BUCKET=resgen-test
@@ -61,6 +61,41 @@ def get_compose_file(base_directory):
     in a base directory."""
     return join(base_directory, '.resgen/config/stack.yml')
 
+def get_secret_key(base_directory=None):
+    """Locate the secret key in the resgen metadata
+    in a base directory. If no base directory is specified then
+    assume the secret key is at ~/.resgen/secret.key.
+    
+    If no secret key is present there, generate a new one and store
+    it there.
+    """
+    if not base_directory:
+        base_directory = os.expanduser('~/.resgen/')
+    
+    if not op.exists(base_directory):
+        os.makedirs(base_directory, exist_ok=True)
+
+    secret_key_file = join(base_directory, 'secret.key')
+
+    print("secret_key_file", secret_key_file)
+
+    if not op.exists(secret_key_file):
+        # If there's no secret key file then return 
+        secret_key = nice()
+    else:
+        with open(secret_key_file, 'r') as f:
+            secret_key = f.read().strip()
+
+            if not secret_key:
+                # Empty secret key
+                secret_key = nice()
+         
+    with open(secret_key_file, 'w') as f:
+        # Write the secret key back, just in case it wasn't previously generated
+        f.write(secret_key)
+
+    return secret_key
+    
 @click.group()
 def manage():
     """Manage resgen deployments."""
@@ -71,7 +106,9 @@ def manage():
 @click.option('--license', type=str, help="The path to the license file to use")
 @click.option('--port', type=int, default=1807, help="The port to execute on")
 @click.option('--platform', default='linux/amd64')
-def start(directory, license, port, platform):
+@click.option('--image', default='public.ecr.aws/s1s0v0c3/resgen:latest')
+@click.option('--foreground', default=False, is_flag=True)
+def start(directory, license, port, platform, image, foreground):
     """Start a resgen instance in a directory.
     
     If there's an existing resgen DB in the directory, it will be used.
@@ -119,12 +156,18 @@ def start(directory, license, port, platform):
             gid=os.getgid(),
             api_host=f"http://localhost:{port}/",
             resgen_license_jwt=license_text,
-            platform=platform
+            platform=platform,
+            resgen_secret_key=get_secret_key(base_directory=join(directory, '.resgen')),
+            image=image
         )
 
         f.write(compose_text)
     
-    run(["docker", "compose", "-f", compose_file, "up"])
+    cmd = ['docker', 'compose']
+    cmd += ["-f", compose_file, 'up']
+    if not foreground:
+        cmd += ['-d']
+    run(cmd)
 
 
 @manage.command()
