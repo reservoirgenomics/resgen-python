@@ -38,14 +38,15 @@ def get_local_datasets(directory):
     to_remove = set()
 
     for d in local_datasets:
-        for index_extension in ['bai', 'fai']:
+        for index_extension in ['bai', 'fai', 'tbi']:
             index_path = f"{d['fullpath']}.{index_extension}"
             if index_path in by_fullpath:
                 d['index_filepath'] = index_path
-                if index_extension in ['.bai']:
+                if index_extension in ['.bai', '.tbi']:
                     # We have no use for .bai files outside of as indexes
                     # .fai files we can add as chromsizes
                     to_remove.add(index_path)
+
 
     local_datasets = [d for d in local_datasets if d['fullpath'] not in to_remove]
     

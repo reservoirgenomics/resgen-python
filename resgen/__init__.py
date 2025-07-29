@@ -41,6 +41,8 @@ RESGEN_AUTH0_DOMAIN = "https://auth.resgen.io"
 # off paging in requests
 MAX_LIMIT = int(1e6)
 
+class ResgenError(Exception):
+    pass
 
 def parse_ucsc(hub_string):
     # print("hub_string:", hub_string)
@@ -664,6 +666,10 @@ class ResgenProject:
             requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
         )
         content = json.loads(ret.content)
+
+        if 'error' in content:
+            raise ResgenError(content['error'])
+        
         return content["uuid"]
 
     def add_download_dataset(self, filepath: str, index_filepath: str = None):

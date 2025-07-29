@@ -7,6 +7,8 @@ import logging
 import resgen as rg
 from resgen.sync.folder import get_local_datasets, get_remote_datasets, add_and_update_local_datasets, remove_stale_remote_datasets
 from resgen.license import get_license, datasets_allowed, LicenseError
+from resgen import ResgenError
+
 from slugid import nice
 
 logger = logging.getLogger(__name__)
@@ -289,8 +291,11 @@ def _sync_datasets(directory):
 
     can_sync_datasets(directory, len(local_datasets))
 
-    add_and_update_local_datasets(project, local_datasets, remote_datasets, base_directory=directory, link=True)
-    remove_stale_remote_datasets(project, local_datasets, remote_datasets)
+    try:
+        add_and_update_local_datasets(project, local_datasets, remote_datasets, base_directory=directory, link=True)
+        remove_stale_remote_datasets(project, local_datasets, remote_datasets)
+    except ResgenError as re:
+        logger.error(str(re))
 
 @manage.command()
 @click.argument('directory')

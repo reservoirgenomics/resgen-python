@@ -95,3 +95,4 @@ class TestLicense:
                 # Mock the license_info function to return a LicenseInfo object
                 get_license(temp_license_file)
                 mock_license_info.assert_called_with('x123')
+
