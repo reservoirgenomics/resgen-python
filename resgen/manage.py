@@ -43,6 +43,7 @@ services:
       - SITE_URL=localhost
       - CELERY_BROKER=rabbitmq:5672
       - RESGEN_LOCAL_JWT_AUTH=True
+      - RESGEN_LOCAL_UPLOADS=True
       - SITE_URL=localhost:{port}
       - RESGEN_LICENSE_JWT={resgen_license_jwt}
     container_name: "resgen-server-container"
@@ -77,7 +78,7 @@ def get_secret_key(base_directory=None):
 
     secret_key_file = join(base_directory, 'secret.key')
 
-    print("secret_key_file", secret_key_file)
+    logger.info("Secret_key_file: %s", secret_key_file)
 
     if not op.exists(secret_key_file):
         # If there's no secret key file then return 
@@ -105,7 +106,7 @@ def manage():
 @click.argument('directory')
 @click.option('--license', type=str, help="The path to the license file to use")
 @click.option('--port', type=int, default=1807, help="The port to execute on")
-@click.option('--platform', default='linux/amd64')
+@click.option('--platform', default=None)
 @click.option('--image', default='public.ecr.aws/s1s0v0c3/resgen:latest')
 @click.option('--foreground', default=False, is_flag=True)
 def start(directory, license, port, platform, image, foreground):
@@ -116,6 +117,17 @@ def start(directory, license, port, platform, image, foreground):
     If not, a new one will be created and populated with all of the files
     in the directory.
     """
+    if not platform:
+        from platform import version as platform_version
+
+        if 'ARM64' in platform_version():
+            logger.info("Inferring arm64 platform from: %s", platform_version())
+            platform = 'linux/arm64/v8'
+        else:
+            platform = 'linux/amd64'
+
+    logger.info("Using platform: %s", platform)
+
     if not license:
         logger.warning("No license file provided, default to guest license. "
                     "This will limit the use of this software to a maximum of 20 files "
@@ -168,6 +180,8 @@ def start(directory, license, port, platform, image, foreground):
     if not foreground:
         cmd += ['-d']
     run(cmd)
+
+    logger.info("Started local resgen on http://localhost:%d", port)
 
 
 @manage.command()
@@ -282,3 +296,77 @@ def _sync_datasets(directory):
 @click.argument('directory')
 def sync_datasets(directory):
     _sync_datasets(directory)
+
+@manage.command()
+def list():
+    """List running resgen docker containers with their directories and ports."""
+    import subprocess
+    import json
+    
+    try:
+        # Get running containers with resgen-server-container name pattern
+        result = subprocess.run(
+            ['docker', 'ps', '--filter', 'name=resgen-server-container', '--format', 'json'],
+            capture_output=True, text=True, check=True
+        )
+        
+        if not result.stdout.strip():
+            print("No running resgen containers found.")
+            return
+            
+        containers = []
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                containers.append(json.loads(line))
+        
+        rows = []
+        
+        for container in containers:
+            container_id = container['ID']
+            
+            # Get detailed container info including mounts and ports
+            inspect_result = subprocess.run(
+                ['docker', 'inspect', container_id],
+                capture_output=True, text=True, check=True
+            )
+            
+            inspect_data = json.loads(inspect_result.stdout)[0]
+            
+            # Extract port mapping
+            ports = inspect_data.get('NetworkSettings', {}).get('Ports', {})
+            port_mapping = "N/A"
+            for container_port, host_bindings in ports.items():
+                if host_bindings and container_port == '80/tcp':
+                    port_mapping = host_bindings[0]['HostPort']
+                    break
+            
+            # Extract data directory mount
+            mounts = inspect_data.get('Mounts', [])
+            data_directory = "N/A"
+            for mount in mounts:
+                if mount.get('Destination') == '/data':
+                    # Extract the parent directory (remove /.resgen/data)
+                    source = mount.get('Source', '')
+                    if source.endswith('/.resgen/data'):
+                        data_directory = source[:-13]  # Remove '/.resgen/data'
+                    else:
+                        data_directory = source
+                    break
+            
+            url = f"https://localhost:{port_mapping}" if port_mapping != "N/A" else "N/A"
+            rows.append([data_directory, url, container['Status']])
+        
+        # Print table header
+        print(f"{'Directory':<50} {'URL':<25} {'Status':<20}")
+        print("-" * 95)
+        
+        # Print table rows
+        for row in rows:
+            print(f"{row[0]:<50} {row[1]:<25} {row[2]:<20}")
+            
+    except subprocess.CalledProcessError as e:
+        print(f"Error running docker command: {e}")
+    except json.JSONDecodeError as e:
+        print(f"Error parsing docker output: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
