@@ -7,7 +7,8 @@ import logging
 import resgen as rg
 from resgen.sync.folder import get_local_datasets, get_remote_datasets, add_and_update_local_datasets, remove_stale_remote_datasets
 from resgen.license import get_license, datasets_allowed, LicenseError
-from resgen import ResgenError
+from resgen.exceptions import ResgenError
+import sys
 
 from slugid import nice
 
@@ -104,14 +105,10 @@ def manage():
     """Manage resgen deployments."""
     pass
 
-@manage.command()
-@click.argument('directory')
-@click.option('--license', type=str, help="The path to the license file to use")
-@click.option('--port', type=int, default=1807, help="The port to execute on")
-@click.option('--platform', default=None)
-@click.option('--image', default='public.ecr.aws/s1s0v0c3/resgen:latest')
-@click.option('--foreground', default=False, is_flag=True)
-def start(directory, license, port, platform, image, foreground):
+DEFAULT_PORT = 1807
+DEFAULT_IMAGE = 'public.ecr.aws/s1s0v0c3/resgen:latest'
+
+def _start(directory, license=None, port=1807, platform=None, image=DEFAULT_IMAGE, foreground=False):
     """Start a resgen instance in a directory.
     
     If there's an existing resgen DB in the directory, it will be used.
@@ -185,6 +182,30 @@ def start(directory, license, port, platform, image, foreground):
 
     logger.info("Started local resgen on http://localhost:%d", port)
 
+@manage.command()
+@click.argument('directory')
+@click.option('--license', type=str, help="The path to the license file to use")
+@click.option('--port', type=int, default=DEFAULT_PORT, help="The port to execute on")
+@click.option('--platform', default=None)
+@click.option('--image', default=DEFAULT_IMAGE)
+@click.option('--foreground', default=False, is_flag=True)
+def start(directory, license, port, platform, image, foreground):
+    """Start a resgen instance in a directory.
+    
+    If there's an existing resgen DB in the directory, it will be used.
+
+    If not, a new one will be created and populated with all of the files
+    in the directory.
+    """
+    _start(
+        directory=directory,
+        license=license,
+        port=port,
+        platform=platform,
+        image=image,
+        foreground=foreground
+    )
+
 
 @manage.command()
 @click.argument('directory')
@@ -230,6 +251,14 @@ def shell(directory, style):
     else:
         run(["docker", "exec", "-it", "resgen-server-container", "bash"])
 
+def _create_user(directory, username, password):
+    """Create a resgen user."""
+    # print("-c", f"\"import django.contrib.auth; django.contrib.auth.models.User.objects.create_user('{username}', password='{password}')\"")
+    compose_file  = get_compose_file(directory)
+
+    run(["docker", "compose", "-f", compose_file,
+         "run", "resgen", "python", "manage.py", "shell", "-c",
+         f"import django.contrib.auth; django.contrib.auth.models.User.objects.create_user('{username}', password='{password}')"])
 
 @manage.command()
 @click.argument('directory')
@@ -238,13 +267,7 @@ def create_user(directory):
     username = input("Username?\n")
     password = input("Password?\n")
 
-    print("username", username, "password", password)
-    print("-c", f"\"import django.contrib.auth; django.contrib.auth.models.User.objects.create_user('{username}', password='{password}')\"")
-    compose_file  = get_compose_file(directory)
-
-    run(["docker", "compose", "-f", compose_file,
-         "run", "resgen", "python", "manage.py", "shell", "-c",
-         f"import django.contrib.auth; django.contrib.auth.models.User.objects.create_user('{username}', password='{password}')"])
+    _create_user(directory, username, password)
 
 @manage.command()
 @click.argument('directory')
@@ -375,3 +398,89 @@ def list():
         print(f"Error parsing docker output: {e}")
     except Exception as e:
         print(f"Unexpected error: {e}")
+
+@manage.command()
+@click.argument("file")
+@click.option("-ft", "--filetype", default=None)
+@click.option("-dt", "--datatype", default=None)
+def view(file, filetype, datatype):
+    """View a dataset."""
+    import webbrowser
+    import time
+    import requests
+    
+    file_path = op.abspath(file)
+    directory = op.dirname(file_path)
+    
+    # Check if server is running at default location
+    server_running = False
+    try:
+        response = requests.get(f"http://localhost:{DEFAULT_PORT}/api/v1/current/", timeout=2)
+        server_running = response.status_code == 200
+    except:
+        server_running = False
+    
+    # Start server if not running
+    if not server_running:
+        logger.info("No server running, starting resgen server...")
+        _start(directory=directory, license=None, port=DEFAULT_PORT, platform=None, image=DEFAULT_IMAGE, foreground=False)
+        
+        # _create_user(directory, 'local', 'local')
+
+        sys.stdout.write("Waiting for server to start...")
+        sys.stdout.flush()
+        # Wait for server to be ready
+        for i in range(30):
+            sys.stdout.write(".")
+            sys.stdout.flush()
+            
+            try:
+                response = requests.get(f"http://localhost:{DEFAULT_PORT}/api/v1/tilesets/", timeout=2)
+                if response.status_code == 200:
+                    break
+            except:
+                pass
+            time.sleep(1)
+    
+    # Sync datasets to ensure file is available
+    # _sync_datasets(directory)
+    
+    # Create viewconf and open browser
+    try:
+        rgc = rg.connect(username='local', password='local', host=f'http://localhost:{DEFAULT_PORT}', auth_provider="local")
+        project = rgc.find_or_create_project(op.basename(directory))
+        
+        # Find the tileset for this file
+        filename = op.basename(file_path)
+        tileset = None
+        for ts in project.tilesets:
+            if filename in ts.datafile:
+                tileset = ts
+                break
+        
+        if tileset:
+            # Create a simple viewconf
+            viewconf = {
+                "views": [{
+                    "uid": "view1",
+                    "tracks": {
+                        "top": [{
+                            "type": tileset.tileset_type,
+                            "server": f"http://localhost:{DEFAULT_PORT}/api/v1",
+                            "tilesetUid": tileset.uuid
+                        }]
+                    }
+                }]
+            }
+            
+            # Save viewconf and get URL
+            saved_viewconf = rgc.post_viewconf(viewconf)
+            url = f"http://localhost:{DEFAULT_PORT}/?d={saved_viewconf['uid']}"
+            
+            logger.info(f"Opening {url}")
+            webbrowser.open(url)
+        else:
+            logger.error(f"Could not find tileset for file: {filename}")
+            
+    except Exception as e:
+        logger.error(f"Error creating viewconf: {e}")

@@ -41,9 +41,6 @@ RESGEN_AUTH0_DOMAIN = "https://auth.resgen.io"
 # off paging in requests
 MAX_LIMIT = int(1e6)
 
-class ResgenError(Exception):
-    pass
-
 def parse_ucsc(hub_string):
     # print("hub_string:", hub_string)
 
