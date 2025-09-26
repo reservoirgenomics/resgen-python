@@ -38,6 +38,7 @@ datatype_default_track = {
     "multivec": "horizontal-multivec",
 }
 
+
 def tracktype_default_position(tracktype: str):
     """
     Get the default track position for a track type.
@@ -135,15 +136,19 @@ FILETYPES = {
         "extensions": [".htime"],
         "datatypes": ["time-interval"],
     },
+    "vcf": {
+        "description": "VCF format",
+        "extensions": [".vcf", ".vcf.gz"],
+        "datatypes": ["bedlike"],
+    },
 }
 
 
 def infer_filetype(filename):
-    _, ext = op.splitext(filename)
-
     for filetype, meta in FILETYPES.items():
-        if ext.lower() in meta["extensions"]:
-            return filetype
+        for ext in meta["extensions"]:
+            if filename.endswith(ext):
+                return filetype
 
     return None
 

@@ -22,7 +22,13 @@ from higlass import track
 
 # from higlass.utils import fill_filetype_and_datatype
 from resgen import aws
-from resgen.utils import tracktype_default_position, datatype_to_tracktype, infer_filetype, infer_datatype
+from resgen.utils import (
+    tracktype_default_position,
+    datatype_to_tracktype,
+    infer_filetype,
+    infer_datatype,
+)
+from resgen.exceptions import ResgenError
 
 # import resgen.utils as rgu
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +46,7 @@ RESGEN_AUTH0_DOMAIN = "https://auth.resgen.io"
 # ridiculously large number used to effectively turn
 # off paging in requests
 MAX_LIMIT = int(1e6)
+
 
 def parse_ucsc(hub_string):
     # print("hub_string:", hub_string)
@@ -120,8 +127,7 @@ class ChromosomeInfo:
         padding: float = 0,
         padding_abs: float = 0,
     ) -> typing.Tuple[int, int]:
-        """Return a range along a chromosome with optional padding.
-        """
+        """Return a range along a chromosome with optional padding."""
         padding_abs += (end - start) * padding
 
         return [
@@ -161,10 +167,10 @@ class ResgenDataset:
         self.datafile = data["datafile"]
         self.uuid = data["uuid"]
         self.tags = []
-        self.project_name = data.get('project_name')
-        self.indexfile = data.get('indexfile')
-        self.containing_folder = data.get('containing_folder')
-        
+        self.project_name = data.get("project_name")
+        self.indexfile = data.get("indexfile")
+        self.containing_folder = data.get("containing_folder")
+
         if "tags" in data:
             self.tags = data["tags"]
 
@@ -216,20 +222,36 @@ class ResgenDataset:
                     "Please specify a position"
                 )
 
-        return (track(
-            track_type,
-            height=height,
-            width=width,
-            tilesetUid=self.uuid,
-            server=f"{self.conn.host}/api/v1",
-            options=options,
-        ), position)
+        if not track_type:
+            raise ValueError(
+                f"Could not find track type for datatype: {datatype} "
+                f"from tags {self.tags}",
+            )
+        print("track_type", track_type)
+        return (
+            track(
+                track_type,
+                height=height,
+                width=width,
+                tilesetUid=self.uuid,
+                server=f"{self.conn.host}/api/v1",
+                options=options,
+            ),
+            position,
+        )
 
 
 class ResgenConnection:
     """Connection to the resgen server."""
 
-    def __init__(self, username, password, host=RESGEN_HOST, bucket=RESGEN_BUCKET, auth_provider='auth0'):
+    def __init__(
+        self,
+        username,
+        password,
+        host=RESGEN_HOST,
+        bucket=RESGEN_BUCKET,
+        auth_provider="auth0",
+    ):
         self.username = username
         self.password = password
         self.host = host
@@ -257,12 +279,12 @@ class ResgenConnection:
 
             if ret.status_code == 200:
                 return self.token
-        
-        if self.auth_provider == 'auth0':
-            return self.get_auth0_token()
+
+        if self.auth_provider == "auth0":
+            return self.get_auth0_token()["access_token"]
         else:
-            return self.get_local_token()
-        
+            return self.get_local_token()["access_token"]
+
     def get_local_token(self) -> str:
         ret = requests.post(
             f"{self.host}/token/",
@@ -281,8 +303,7 @@ class ResgenConnection:
 
         data = json.loads(ret.content.decode("utf8"))
         self.token = data["access"]
-        return self.token
-    
+        return {"access_token": self.token, "refresh_token": data["refresh"]}
 
     def get_auth0_token(self) -> str:
         ret = requests.post(
@@ -304,15 +325,16 @@ class ResgenConnection:
 
         data = json.loads(ret.content.decode("utf8"))
         self.token = data["access_token"]
-        return self.token
+        return {
+            "access_token": self.token,
+            "refresh_token": data["refresh_token"],
+        }
 
     def find_project(self, project_name: str, gruser: str = None):
         """Find a project."""
         name = gruser or self.username
         url = f"{self.host}/api/v1/projects/?n={name}&pn={project_name}&is=true"
-        ret = self.authenticated_request(
-            requests.get, url
-        )
+        ret = self.authenticated_request(requests.get, url)
 
         if ret.status_code != 200:
             return UnknownConnectionException("Failed to fetch projects", ret)
@@ -348,13 +370,13 @@ class ResgenConnection:
         ret = self.authenticated_request(requests.get, url)
 
         not_found = False
-        
+
         if ret.status_code == 404:
             not_found = True
-        
+
         retj = ret.json()
 
-        if ('count' in retj and retj["count"] == 0):
+        if "count" in retj and retj["count"] == 0:
             not_found = True
 
         if not_found:
@@ -368,7 +390,7 @@ class ResgenConnection:
                 return ResgenProject(ret.json()["uuid"], self)
             raise UnknownConnectionException("Failed to create project", ret)
 
-        if not 'results' in retj:
+        if not "results" in retj:
             raise UnknownConnectionException("No results in project", ret)
 
         return ResgenProject(retj["results"][0]["uuid"], self)
@@ -625,14 +647,23 @@ class ResgenProject:
             "tags": [],
         }
         ret = self.conn.authenticated_request(
-            requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
+            requests.post,
+            f"{self.conn.host}/api/v1/tilesets/",
+            json=body,
         )
         content = json.loads(ret.content)
-        logger.info("Added folder: %s", content['uuid'])
+        logger.info("Added folder: %s", content["uuid"])
 
         return content["uuid"]
-    
-    def add_link_dataset(self, filepath: str, index_filepath: str = None, name:str = None, parent: str = None, private: bool = True):
+
+    def add_link_dataset(
+        self,
+        filepath: str,
+        index_filepath: str = None,
+        name: str = None,
+        parent: str = None,
+        private: bool = True,
+    ):
         """Add a remote dataset
 
         Args:
@@ -643,7 +674,7 @@ class ResgenProject:
             The uuid of the newly created dataset.
 
         """
-        name = name if name else filepath.split('/')[-1]
+        name = name if name else filepath.split("/")[-1]
 
         logger.info("Adding link dataset: %s parent: %s", filepath, parent)
         body = {
@@ -660,13 +691,15 @@ class ResgenProject:
             body["indexfile"] = index_filepath
 
         ret = self.conn.authenticated_request(
-            requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
+            requests.post,
+            f"{self.conn.host}/api/v1/tilesets/",
+            json=body,
         )
         content = json.loads(ret.content)
 
-        if 'error' in content:
-            raise ResgenError(content['error'])
-        
+        if "error" in content:
+            raise ResgenError(content["error"])
+
         return content["uuid"]
 
     def add_download_dataset(self, filepath: str, index_filepath: str = None):
@@ -694,7 +727,9 @@ class ResgenProject:
             body["indexfile"] = index_filepath
 
         ret = self.conn.authenticated_request(
-            requests.post, f"{self.conn.host}/api/v1/tilesets/", json=body,
+            requests.post,
+            f"{self.conn.host}/api/v1/tilesets/",
+            json=body,
         )
 
         if ret.status_code != 201:
@@ -730,8 +765,14 @@ class ResgenProject:
 
         return content["uuid"]
 
-    def add_upload_dataset(self, filepath: str, index_filepath: str = None, name:str = None,
-                         parent: str = None, private: bool = True):
+    def add_upload_dataset(
+        self,
+        filepath: str,
+        index_filepath: str = None,
+        name: str = None,
+        parent: str = None,
+        private: bool = True,
+    ):
         """Add a dataset by uploading it to resgen
 
         Args:
@@ -747,7 +788,7 @@ class ResgenProject:
         """
         logger.info("Adding upload dataset: %s", filepath)
 
-        name = name if name else filepath.split('/')[-1]
+        name = name if name else filepath.split("/")[-1]
 
         (directory_path, index_directory_path) = self.conn.upload_to_resgen_aws(
             filepath, index_filepath=index_filepath
@@ -763,14 +804,16 @@ class ResgenProject:
             "project": self.uuid,
             "private": private,
             "containing_folder": parent,
-            "name": name
+            "name": name,
         }
 
         if index_directory_path:
             body["indexpath"] = index_directory_path
 
         ret = self.conn.authenticated_request(
-            requests.post, f"{self.conn.host}/api/v1/finish_file_upload/", json=body,
+            requests.post,
+            f"{self.conn.host}/api/v1/finish_file_upload/",
+            json=body,
         )
 
         if ret.status_code != 200:
@@ -852,12 +895,17 @@ class ResgenProject:
             "uid": slugid.nice(),
         }
 
+        logger.info("Adding viewconf...")
         ret = self.conn.authenticated_request(
-            requests.post, f"{self.conn.host}/api/v1/viewconfs/", json=post_data
+            requests.post, f"{self.conn.host}/api/v1/viewconfs/?delay=t", json=post_data
         )
 
+        logger.info("Added viewconf: %s", ret)
         if ret.status_code != 201:
             raise UnknownConnectionException("Unable to add viewconf", ret)
+
+        content = ret.json()
+        return content
 
     def __str__(self):
         """String representation."""
@@ -1061,13 +1109,15 @@ def connect(
     password: str = None,
     host: str = RESGEN_HOST,
     bucket: str = RESGEN_BUCKET,
-    auth_provider: str = 'auth0'
+    auth_provider: str = "auth0",
 ) -> ResgenConnection:
     """Open a connection to resgen."""
     env_path = Path.home() / ".resgen" / "credentials"
 
     if username and password:
-        return ResgenConnection(username, password, host, bucket, auth_provider=auth_provider)
+        return ResgenConnection(
+            username, password, host, bucket, auth_provider=auth_provider
+        )
 
     if env_path.exists():
         load_dotenv(env_path)
@@ -1083,4 +1133,6 @@ def connect(
     if password is None:
         password = os.getenv("RESGEN_PASSWORD")
 
-    return ResgenConnection(username, password, host, bucket, auth_provider=auth_provider)
+    return ResgenConnection(
+        username, password, host, bucket, auth_provider=auth_provider
+    )
