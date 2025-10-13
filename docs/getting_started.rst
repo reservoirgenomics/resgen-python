@@ -87,7 +87,9 @@ Datasets
 Adding Datasets
 ^^^^^^^^^^^^^^^
 
-Use ``sync_dataset`` to upload data to a project. This function will check if a dataset with this filename exists in the project and uploads the local file if it doesn't. If a dataset with an equivalent filename exists in the project, this command will simply return its uuid.
+Use ``sync_dataset`` to upload data to a project. This function will check if a dataset with this filename exists in the project
+and uploads the local file if it doesn't. If a dataset with an equivalent filename exists in the project, this command will simply
+return its uuid.
 
 .. code-block:: python
 

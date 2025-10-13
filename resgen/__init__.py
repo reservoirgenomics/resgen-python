@@ -227,7 +227,7 @@ class ResgenDataset:
                 f"Could not find track type for datatype: {datatype} "
                 f"from tags {self.tags}",
             )
-        print("track_type", track_type)
+
         return (
             track(
                 track_type,
@@ -977,7 +977,6 @@ class ResgenProject:
 
     def add_or_get_folder(self, name, parent):
         """Either get an existing folder or add one if none exists that matches the parameters."""
-        print("aogf")
         datasets = self.conn.find_datasets(project=self)
 
         for ds in datasets:

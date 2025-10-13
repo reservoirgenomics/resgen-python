@@ -141,6 +141,11 @@ FILETYPES = {
         "extensions": [".vcf", ".vcf.gz"],
         "datatypes": ["bedlike"],
     },
+    "csv": {
+        "description": "CSV format",
+        "extensions": [".csv"],
+        "datatypes": ["sequence_logo"],
+    },
 }
 
 

@@ -502,9 +502,11 @@ def list():
 @click.option("-ft", "--filetype", default=None)
 @click.option("-dt", "--datatype", default=None)
 @click.option("-tt", "--tracktype", default=None)
+@click.option("-tp", "--track-position", default=None)
+@click.option("-t", "--tag", multiple=True, help="Pass in tags")
 @click.option("--image", default=DEFAULT_IMAGE)
 @click.option("--platform", default=None)
-def view(file, filetype, datatype, tracktype, image, platform):
+def view(file, filetype, datatype, tracktype, track_position, tag, image, platform):
     """View a dataset."""
     import webbrowser
     import time
@@ -598,14 +600,17 @@ def view(file, filetype, datatype, tracktype, image, platform):
         logger.info("Adding link dataset", dataset_rel_path)
         uuid = project.add_link_dataset(dataset_rel_path)
 
+        tags = [
+            {"name": f"filetype:{filetype}"},
+            {"name": f"datatype:{datatype}"},
+        ]
+
+        for t in tag:
+            tags += [{"name": t}]
+
         rgc.update_dataset(
             uuid,
-            {
-                "tags": [
-                    {"name": f"filetype:{filetype}"},
-                    {"name": f"datatype:{datatype}"},
-                ]
-            },
+            {"tags": tags},
         )
 
         tileset = rgc.get_dataset(uuid)
@@ -615,7 +620,7 @@ def view(file, filetype, datatype, tracktype, image, platform):
 
     from higlass import view
 
-    track = tileset.hg_track(track_type=tracktype)
+    track = tileset.hg_track(track_type=tracktype, position=track_position)
     viewconf = view(track)
 
     # Save viewconf and get URL
