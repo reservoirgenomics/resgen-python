@@ -34,7 +34,7 @@ from resgen.exceptions import ResgenError
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-__version__ = "0.7.2"
+__version__ = "0.8.0"
 
 RESGEN_HOST = "https://resgen.io"
 RESGEN_BUCKET = "resgen"
