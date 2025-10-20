@@ -1,0 +1,2 @@
+class ResgenError(Exception):
+    pass
