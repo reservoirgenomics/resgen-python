@@ -503,10 +503,21 @@ def list():
 @click.option("-dt", "--datatype", default=None)
 @click.option("-tt", "--tracktype", default=None)
 @click.option("-tp", "--track-position", default=None)
+@click.option("-th", "--track-height", default=100)
 @click.option("-t", "--tag", multiple=True, help="Pass in tags")
 @click.option("--image", default=DEFAULT_IMAGE)
 @click.option("--platform", default=None)
-def view(file, filetype, datatype, tracktype, track_position, tag, image, platform):
+def view(
+    file,
+    filetype,
+    datatype,
+    tracktype,
+    track_position,
+    track_height,
+    tag,
+    image,
+    platform,
+):
     """View a dataset."""
     import webbrowser
     import time
@@ -600,27 +611,31 @@ def view(file, filetype, datatype, tracktype, track_position, tag, image, platfo
         logger.info("Adding link dataset", dataset_rel_path)
         uuid = project.add_link_dataset(dataset_rel_path)
 
-        tags = [
-            {"name": f"filetype:{filetype}"},
-            {"name": f"datatype:{datatype}"},
-        ]
-
-        for t in tag:
-            tags += [{"name": t}]
-
-        rgc.update_dataset(
-            uuid,
-            {"tags": tags},
-        )
-
         tileset = rgc.get_dataset(uuid)
+
+    uuid = tileset.uuid
+    tags = [
+        {"name": f"filetype:{filetype}"},
+        {"name": f"datatype:{datatype}"},
+    ]
+
+    for t in tag:
+        tags += [{"name": t}]
+
+    rgc.update_dataset(
+        uuid,
+        {"tags": tags},
+    )
+
     # else:
     #     print("deleting")
     #     project.delete_dataset(tileset.uuid)
 
     from higlass import view
 
-    track = tileset.hg_track(track_type=tracktype, position=track_position)
+    track = tileset.hg_track(
+        track_type=tracktype, position=track_position, height=track_height
+    )
     viewconf = view(track)
 
     # Save viewconf and get URL
