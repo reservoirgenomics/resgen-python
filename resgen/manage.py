@@ -57,6 +57,7 @@ services:
       - RESGEN_CLIENT_SCHEME=http
       - RESGEN_CLIENT_PORT=80
       - RESGEN_USER_SQLITE_DIR=/data/
+      - RESGEN_S3_FILES_ENABLED=True
       - RESGEN_AWS_BUCKET=resgen-test
       - RESGEN_AWS_BUCKET_PREFIX=tmp
       - RESGEN_AWS_BUCKET_MOUNT_POINT=aws
@@ -359,7 +360,7 @@ def can_sync_datasets(directory, total_tilesets):
 
         if total_tilesets > datasets_allowed(license):
             raise LicenseError(
-                f"Guest account has exceeded the number of datasets allowed ({datasets_allowed(license)})"
+                f"Guest license has exceeded the number of datasets allowed ({datasets_allowed(license)})"
             )
 
 
@@ -523,8 +524,13 @@ def view(
     import time
     import requests
 
-    file_path = op.abspath(file)
-    directory = op.dirname(file_path)
+    logger.info("file_path %s", file)
+    if file.startswith("s3://"):
+        directory = op.expanduser("~")
+        file_path = file
+    else:
+        file_path = op.abspath(file)
+        directory = op.dirname(file_path)
     logger.info(f"Directory {directory}")
 
     # Check if server is running at default location
@@ -585,6 +591,8 @@ def view(
     token = rgc.get_local_token()
 
     # Find the tileset for this file
+    # TODO, we may want to use a hash or something to identify
+    # this file. On the other hand, that would take a lot of tile
     filename = op.basename(file_path)
     tileset = None
     for ts in project.list_datasets():
@@ -607,9 +615,12 @@ def view(
 
     if not tileset:
         # need to add the dataset
-        dataset_rel_path = op.relpath(file_path, directory)
-        logger.info("Adding link dataset", dataset_rel_path)
-        uuid = project.add_link_dataset(dataset_rel_path)
+        if file_path.startswith("s3"):
+            uuid = project.add_s3_dataset(file_path)
+        else:
+            dataset_rel_path = op.relpath(file_path, directory)
+            logger.info("Adding link dataset", dataset_rel_path)
+            uuid = project.add_link_dataset(dataset_rel_path)
 
         tileset = rgc.get_dataset(uuid)
 

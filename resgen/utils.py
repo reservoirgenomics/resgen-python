@@ -25,6 +25,7 @@ _track_default_position = {
     "top-axis": "top",
     "viewport-projection-center": "center",
     "viewport-projection-horizontal": "top",
+    "pileup": "top",
 }
 
 
@@ -36,6 +37,7 @@ datatype_default_track = {
     "matrix": "heatmap",
     "vector": "horizontal-bar",
     "multivec": "horizontal-multivec",
+    "reads": "pileup",
 }
 
 
@@ -144,7 +146,7 @@ FILETYPES = {
     "csv": {
         "description": "CSV format",
         "extensions": [".csv"],
-        "datatypes": ["sequence_logo"],
+        "datatypes": ["reads", "sequence_logo"],
     },
 }
 

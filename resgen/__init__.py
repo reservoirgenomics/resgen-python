@@ -702,6 +702,52 @@ class ResgenProject:
 
         return content["uuid"]
 
+    def add_s3_dataset(
+        self,
+        filepath: str,
+        index_filepath: str = None,
+        name: str = None,
+        parent: str = None,
+        private: bool = True,
+    ):
+        """Add an S3 dataset
+
+        Args:
+            filepath: The S3 path of the dataset to add.
+            index_filepath: The S3 path of the index for this dataset
+
+        Returns:
+            The uuid of the newly created dataset.
+
+        """
+        name = name if name else filepath.split("/")[-1]
+
+        logger.info("Adding S3 dataset: %s parent: %s", filepath, parent)
+        body = {
+            "datafile": filepath,
+            "name": name,
+            "containing_folder": parent,
+            "private": private,
+            "project": self.uuid,
+            "download": False,
+            "tags": [],
+        }
+
+        if index_filepath:
+            body["indexfile"] = index_filepath
+
+        ret = self.conn.authenticated_request(
+            requests.post,
+            f"{self.conn.host}/api/v1/tilesets/",
+            json=body,
+        )
+        content = json.loads(ret.content)
+
+        if "error" in content:
+            raise ResgenError(content["error"])
+
+        return content["uuid"]
+
     def add_download_dataset(self, filepath: str, index_filepath: str = None):
         """Add a dataset by downloading it from a remote source
 

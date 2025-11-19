@@ -1,3 +1,11 @@
+## v0.9.0
+
+- View files on S3
+
+## v0.8.0, v0.8.1
+
+- Sequence logo plot and pileups based on csv files
+
 ## v0.7.2
 
 - Improve error handling in find_or_create_project
