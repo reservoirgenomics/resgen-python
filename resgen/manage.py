@@ -46,7 +46,7 @@ services:
     volumes:
       - {data_directory}:/data
       - {tmp_directory}:/tmp
-      - {media_directory}:/media
+      - {media_directory}:/media{aws_volume}
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -140,6 +140,7 @@ def _start(
     platform=None,
     image=DEFAULT_IMAGE,
     foreground=False,
+    use_aws_creds=False,
 ):
     """Start a resgen instance in a directory.
 
@@ -191,6 +192,12 @@ def _start(
     if not op.exists(tmp_directory):
         os.makedirs(tmp_directory, exist_ok=True)
 
+    aws_volume = ""
+    if use_aws_creds:
+        aws_creds_path = os.path.expanduser("~/.aws")
+        if os.path.exists(aws_creds_path):
+            aws_volume = f"\n      - {aws_creds_path}:/root/.aws"
+
     with open(compose_file, "w") as f:
         compose_text = START_TEMPLATE.format(
             data_directory=data_directory,
@@ -204,6 +211,7 @@ def _start(
             platform=platform,
             resgen_secret_key=get_secret_key(base_directory=join(directory, ".resgen")),
             image=image,
+            aws_volume=aws_volume,
         )
 
         f.write(compose_text)
@@ -224,7 +232,13 @@ def _start(
 @click.option("--platform", default=None)
 @click.option("--image", default=DEFAULT_IMAGE)
 @click.option("--foreground", default=False, is_flag=True)
-def start(directory, license, port, platform, image, foreground):
+@click.option(
+    "--use-aws-creds",
+    default=False,
+    is_flag=True,
+    help="Mount ~/.aws credentials into container",
+)
+def start(directory, license, port, platform, image, foreground, use_aws_creds):
     """Start a resgen instance in a directory.
 
     If there's an existing resgen DB in the directory, it will be used.
@@ -239,6 +253,7 @@ def start(directory, license, port, platform, image, foreground):
         platform=platform,
         image=image,
         foreground=foreground,
+        use_aws_creds=use_aws_creds,
     )
 
 
@@ -525,7 +540,8 @@ def view(
     import requests
 
     logger.info("file_path %s", file)
-    if file.startswith("s3://"):
+    is_s3_file = file.startswith("s3://")
+    if is_s3_file:
         directory = op.expanduser("~")
         file_path = file
     else:
@@ -543,6 +559,32 @@ def view(
     except:
         server_running = False
 
+    # Check if AWS credentials are needed and available for S3 files
+    if is_s3_file and server_running:
+        import subprocess
+
+        try:
+            # Check if AWS credentials are mounted in the running container
+            result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "resgen-server-container",
+                    "test",
+                    "-f",
+                    "/root/.aws/credentials",
+                ],
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                logger.info(
+                    "AWS credentials not mounted, restarting container with credentials..."
+                )
+                stop(directory)
+                server_running = False
+        except subprocess.CalledProcessError:
+            server_running = False
+
     # Start server if not running
     if not server_running:
         logger.info("No server running, starting resgen server...")
@@ -553,6 +595,7 @@ def view(
             image=image,
             foreground=False,
             platform=platform,
+            use_aws_creds=is_s3_file,
         )
 
         # _create_user(directory, 'local', 'local')

@@ -1,3 +1,7 @@
+## v0.9.1
+
+- View private files on S3
+
 ## v0.9.0
 
 - View files on S3
