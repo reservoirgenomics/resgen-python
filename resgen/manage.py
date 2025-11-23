@@ -27,7 +27,6 @@ from slugid import nice
 logger = logging.getLogger(__name__)
 
 START_TEMPLATE = """
-version: "3"
 services:
   redis:
     image: "redis:alpine"
@@ -150,13 +149,7 @@ def _start(
     in the directory.
     """
     if not platform:
-        from platform import version as platform_version
-
-        if "ARM64" in platform_version():
-            logger.info("Inferring arm64 platform from: %s", platform_version())
-            platform = "linux/arm64/v8"
-        else:
-            platform = "linux/amd64"
+        platform = "linux/amd64"
 
     logger.info("Using platform: %s", platform)
 
@@ -217,6 +210,7 @@ def _start(
         f.write(compose_text)
 
     cmd = ["docker", "compose"]
+    cmd += ["--remove-orphans"]
     cmd += ["-f", compose_file, "up"]
     if not foreground:
         cmd += ["-d"]
@@ -425,9 +419,8 @@ def sync_datasets(directory):
     _sync_datasets(directory)
 
 
-@manage.command()
-def list():
-    """List running resgen docker containers with their directories and ports."""
+def _list_containers():
+    """Internal function to list running resgen containers."""
     import subprocess
     import json
 
@@ -493,7 +486,7 @@ def list():
                     break
 
             url = (
-                f"https://localhost:{port_mapping}" if port_mapping != "N/A" else "N/A"
+                f"http://localhost:{port_mapping}" if port_mapping != "N/A" else "N/A"
             )
             rows.append([data_directory, url, container["Status"]])
 
@@ -511,6 +504,59 @@ def list():
         print(f"Error parsing docker output: {e}")
     except Exception as e:
         print(f"Unexpected error: {e}")
+
+
+@manage.command()
+def list():
+    """List running resgen docker containers with their directories and ports."""
+    _list_containers()
+
+
+@manage.command()
+def ls():
+    """List running resgen docker containers with their directories and ports."""
+    _list_containers()
+
+
+def fill_in_filetype_datatype_tracktype(file_path, filetype, datatype, tracktype):
+    """Fill in missing filetype, datatype and tracktype values by inferring them from a file.
+
+    This function takes a file path and optional filetype, datatype and tracktype parameters.
+    For any parameters that are not provided (None), it will attempt to infer them based on
+    the file extension and known mappings between filetypes, datatypes and tracktypes.
+
+    Args:
+        file_path (str): Path to the file to analyze
+        filetype (str, optional): The type of file (e.g. 'bigwig', 'cooler'). Will be inferred if None.
+        datatype (str, optional): The type of data (e.g. 'vector', 'matrix'). Will be inferred if None.
+        tracktype (str, optional): The type of track (e.g. 'horizontal-bar', 'heatmap'). Will be inferred if None.
+
+    Returns:
+        tuple: A tuple containing (filetype, datatype, tracktype) with all values filled in
+
+    Raises:
+        ValueError: If filetype cannot be inferred from the file
+    """
+    if not filetype:
+        filetype = infer_filetype(file_path)
+        logger.info(f"Inferred filetype: {filetype}")
+    if not datatype:
+        datatype = infer_datatype(filetype)
+        logger.info(f"Inferred datatype: {datatype}")
+    if not tracktype:
+        tracktype, position = datatype_to_tracktype(datatype)
+        logger.info(f"Inferred tracktype: {tracktype}")
+
+    if not filetype:
+        raise ValueError(f"Could not infer filetype for filename: {file_path}")
+
+    if filetype == "gff":
+        from clodius.tiles.gff import tileset_info
+
+        # Try getting tileset info to validate that the file is valid
+        tileset_info(file_path)
+
+    return filetype, datatype, tracktype
 
 
 @manage.command()
@@ -548,6 +594,10 @@ def view(
         file_path = op.abspath(file)
         directory = op.dirname(file_path)
     logger.info(f"Directory {directory}")
+
+    filetype, datatype, tracktype = fill_in_filetype_datatype_tracktype(
+        file_path, filetype, datatype, tracktype
+    )
 
     # Check if server is running at default location
     server_running = False
@@ -642,19 +692,6 @@ def view(
         if filename in ts.datafile:
             tileset = ts
             break
-
-    if not filetype:
-        filetype = infer_filetype(file_path)
-        logger.info(f"Inferred filetype: {filetype}")
-    if not datatype:
-        datatype = infer_datatype(filetype)
-        logger.info(f"Inferred datatype: {datatype}")
-    if not tracktype:
-        tracktype, position = datatype_to_tracktype(datatype)
-        logger.info(f"Inferred tracktype: {tracktype}")
-
-    if not filetype:
-        raise ValueError(f"Could not infer filetype for filename: {file_path}")
 
     if not tileset:
         # need to add the dataset

@@ -148,6 +148,11 @@ FILETYPES = {
         "extensions": [".csv"],
         "datatypes": ["reads", "sequence_logo"],
     },
+    "gff": {
+        "description": "GFF format",
+        "extensions": [".gff", ".gff.gz"],
+        "datatypes": ["gene-annotations"],
+    },
 }
 
 
