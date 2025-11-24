@@ -135,7 +135,7 @@ DEFAULT_IMAGE = "public.ecr.aws/s1s0v0c3/resgen:latest"
 def _start(
     directory,
     license=None,
-    port=1807,
+    port=None,
     platform=None,
     image=DEFAULT_IMAGE,
     foreground=False,
@@ -148,6 +148,49 @@ def _start(
     If not, a new one will be created and populated with all of the files
     in the directory.
     """
+    # Check if AWS credentials are loaded in existing container
+    running_containers = _get_running_containers()
+    current_container = next(
+        (c for c in running_containers if c["directory"] == directory), None
+    )
+
+    if current_container:
+        if use_aws_creds:
+            # If we need to use aws credentials then we need to make sure
+            # they're mounted in the docker container
+            import subprocess
+
+            try:
+                result = subprocess.run(
+                    [
+                        "docker",
+                        "exec",
+                        current_container["id"],
+                        "test",
+                        "-f",
+                        "/root/.aws/credentials",
+                    ],
+                    capture_output=True,
+                )
+                if result.returncode != 0:
+                    logger.info(
+                        "AWS credentials not mounted, restarting container with credentials..."
+                    )
+                    stop(directory)
+                    current_container = None
+            except subprocess.CalledProcessError:
+                pass
+
+    # Auto-assign port if not provided
+    if port is None:
+        if current_container:
+            port = current_container["port"]
+        else:
+            used_ports = {c["port"] for c in running_containers}
+            port = DEFAULT_PORT
+            while port in used_ports:
+                port += 1
+
     if not platform:
         platform = "linux/amd64"
 
@@ -172,6 +215,8 @@ def _start(
     data_directory = join(directory, ".resgen/data")
     tmp_directory = join(directory, ".resgen/tmp")
     media_directory = directory
+
+    print("data_directory", data_directory)
 
     # Store the license in the resgen directory so that we don't
     # have to pass it in to the e.g. sync command
@@ -210,19 +255,25 @@ def _start(
         f.write(compose_text)
 
     cmd = ["docker", "compose"]
-    cmd += ["--remove-orphans"]
+    cmd += ["--project-directory", "."]
     cmd += ["-f", compose_file, "up"]
     if not foreground:
         cmd += ["-d"]
     run(cmd)
 
     logger.info("Started local resgen on http://localhost:%d", port)
+    return port
 
 
 @manage.command()
 @click.argument("directory")
 @click.option("--license", type=str, help="The path to the license file to use")
-@click.option("--port", type=int, default=DEFAULT_PORT, help="The port to execute on")
+@click.option(
+    "--port",
+    type=int,
+    default=None,
+    help="The port to execute on (auto-assigned if not specified)",
+)
 @click.option("--platform", default=None)
 @click.option("--image", default=DEFAULT_IMAGE)
 @click.option("--foreground", default=False, is_flag=True)
@@ -276,6 +327,9 @@ def logs(directory, service=None):
     for service in services:
         print(f"=== {service} ===")
         files = [f for f in os.listdir(tmp_dir) if f.startswith(f"{service}-stderr")]
+        if not files:
+            print("No logs found", file=sys.stderr)
+            continue
 
         assert len(files) == 1, "There should be only one resgen error file"
         with open(join(tmp_dir, files[0]), "r") as f:
@@ -419,13 +473,12 @@ def sync_datasets(directory):
     _sync_datasets(directory)
 
 
-def _list_containers():
-    """Internal function to list running resgen containers."""
+def _get_running_containers():
+    """Get running resgen containers data."""
     import subprocess
     import json
 
     try:
-        # Get running containers with resgen-server-container name pattern
         result = subprocess.run(
             [
                 "docker",
@@ -441,69 +494,62 @@ def _list_containers():
         )
 
         if not result.stdout.strip():
-            print("No running resgen containers found.")
-            return
+            return []
 
         containers = []
         for line in result.stdout.strip().split("\n"):
             if line:
-                containers.append(json.loads(line))
+                container = json.loads(line)
+                inspect_result = subprocess.run(
+                    ["docker", "inspect", container["ID"]],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                inspect_data = json.loads(inspect_result.stdout)[0]
 
-        rows = []
+                # Extract port
+                ports = inspect_data.get("NetworkSettings", {}).get("Ports", {})
+                port = None
+                for container_port, host_bindings in ports.items():
+                    if host_bindings and container_port == "80/tcp":
+                        port = int(host_bindings[0]["HostPort"])
+                        break
 
-        for container in containers:
-            container_id = container["ID"]
+                # Extract directory
+                directory = None
+                for mount in inspect_data.get("Mounts", []):
+                    if mount.get("Destination") == "/data":
+                        source = mount.get("Source", "")
+                        directory = (
+                            source[:-13] if source.endswith("/.resgen/data") else source
+                        )
+                        break
 
-            # Get detailed container info including mounts and ports
-            inspect_result = subprocess.run(
-                ["docker", "inspect", container_id],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
+                if port and directory:
+                    containers.append(
+                        {"directory": directory, "port": port, "id": container["ID"]}
+                    )
 
-            inspect_data = json.loads(inspect_result.stdout)[0]
+        return containers
+    except:
+        return []
 
-            # Extract port mapping
-            ports = inspect_data.get("NetworkSettings", {}).get("Ports", {})
-            port_mapping = "N/A"
-            for container_port, host_bindings in ports.items():
-                if host_bindings and container_port == "80/tcp":
-                    port_mapping = host_bindings[0]["HostPort"]
-                    break
 
-            # Extract data directory mount
-            mounts = inspect_data.get("Mounts", [])
-            data_directory = "N/A"
-            for mount in mounts:
-                if mount.get("Destination") == "/data":
-                    # Extract the parent directory (remove /.resgen/data)
-                    source = mount.get("Source", "")
-                    if source.endswith("/.resgen/data"):
-                        data_directory = source[:-13]  # Remove '/.resgen/data'
-                    else:
-                        data_directory = source
-                    break
+def _list_containers():
+    """Print running resgen containers."""
+    containers = _get_running_containers()
 
-            url = (
-                f"http://localhost:{port_mapping}" if port_mapping != "N/A" else "N/A"
-            )
-            rows.append([data_directory, url, container["Status"]])
+    if not containers:
+        print("No running resgen containers found.")
+        return
 
-        # Print table header
-        print(f"{'Directory':<50} {'URL':<25} {'Status':<20}")
-        print("-" * 95)
+    print(f"{'Directory':<50} {'URL':<25} {'Status':<20}")
+    print("-" * 95)
 
-        # Print table rows
-        for row in rows:
-            print(f"{row[0]:<50} {row[1]:<25} {row[2]:<20}")
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error running docker command: {e}")
-    except json.JSONDecodeError as e:
-        print(f"Error parsing docker output: {e}")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+    for container in containers:
+        url = f"http://localhost:{container['port']}"
+        print(f"{container['directory']:<50} {url:<25} {'Running':<20}\n")
 
 
 @manage.command()
@@ -599,73 +645,32 @@ def view(
         file_path, filetype, datatype, tracktype
     )
 
-    # Check if server is running at default location
-    server_running = False
-    try:
-        response = requests.get(
-            f"http://localhost:{DEFAULT_PORT}/api/v1/current/", timeout=2
-        )
-        server_running = response.status_code == 200
-    except:
-        server_running = False
+    port = _start(
+        directory=directory,
+        license=None,
+        image=image,
+        foreground=False,
+        platform=platform,
+        use_aws_creds=is_s3_file,
+    )
 
-    # Check if AWS credentials are needed and available for S3 files
-    if is_s3_file and server_running:
-        import subprocess
+    sys.stdout.write("Waiting for server to start...")
+    sys.stdout.flush()
+    # Wait for server to be ready
+    for i in range(30):
+        sys.stdout.write(".")
+        sys.stdout.flush()
 
         try:
-            # Check if AWS credentials are mounted in the running container
-            result = subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    "resgen-server-container",
-                    "test",
-                    "-f",
-                    "/root/.aws/credentials",
-                ],
-                capture_output=True,
+            response = requests.get(
+                f"http://localhost:{port}/api/v1/tilesets/",
+                timeout=2,
             )
-            if result.returncode != 0:
-                logger.info(
-                    "AWS credentials not mounted, restarting container with credentials..."
-                )
-                stop(directory)
-                server_running = False
-        except subprocess.CalledProcessError:
-            server_running = False
-
-    # Start server if not running
-    if not server_running:
-        logger.info("No server running, starting resgen server...")
-        _start(
-            directory=directory,
-            license=None,
-            port=DEFAULT_PORT,
-            image=image,
-            foreground=False,
-            platform=platform,
-            use_aws_creds=is_s3_file,
-        )
-
-        # _create_user(directory, 'local', 'local')
-
-        sys.stdout.write("Waiting for server to start...")
-        sys.stdout.flush()
-        # Wait for server to be ready
-        for i in range(30):
-            sys.stdout.write(".")
-            sys.stdout.flush()
-
-            try:
-                response = requests.get(
-                    f"http://localhost:{DEFAULT_PORT}/api/v1/tilesets/", timeout=2
-                )
-                if response.status_code == 200:
-                    break
-            except:
-                pass
-            time.sleep(1)
+            if response.status_code == 200:
+                break
+        except:
+            pass
+        time.sleep(1)
 
     sys.stdout.write("\n")
     sys.stdout.flush()
@@ -674,11 +679,11 @@ def view(
 
     # Create viewconf and open browser
     rgc = rg.connect(
-        username="local",
-        password="local",
-        host=f"http://localhost:{DEFAULT_PORT}",
+        host=f"http://localhost:{port}",
         auth_provider="local",
+        use_dotfile_credentials=False,
     )
+
     project = rgc.find_or_create_project(op.basename(directory))
 
     token = rgc.get_local_token()
@@ -699,7 +704,7 @@ def view(
             uuid = project.add_s3_dataset(file_path)
         else:
             dataset_rel_path = op.relpath(file_path, directory)
-            logger.info("Adding link dataset", dataset_rel_path)
+            logger.info("Adding link dataset: %s", dataset_rel_path)
             uuid = project.add_link_dataset(dataset_rel_path)
 
         tileset = rgc.get_dataset(uuid)
@@ -731,7 +736,7 @@ def view(
 
     # Save viewconf and get URL
     saved_viewconf = project.add_viewconf(viewconf.viewconf().dict(), "View dataset")
-    url = f"http://localhost:{DEFAULT_PORT}/viewer/{saved_viewconf['uuid']}?at={token['access_token']}&rt={token['refresh_token']}"
+    url = f"http://localhost:{port}/viewer/{saved_viewconf['uuid']}?at={token['access_token']}&rt={token['refresh_token']}"
 
     logger.info(f"Opening {url}")
     webbrowser.open(url)

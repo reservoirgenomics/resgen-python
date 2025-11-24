@@ -1155,16 +1155,21 @@ def connect(
     host: str = RESGEN_HOST,
     bucket: str = RESGEN_BUCKET,
     auth_provider: str = "auth0",
+    use_dotfile_credentials: bool = True,
 ) -> ResgenConnection:
     """Open a connection to resgen."""
-    env_path = Path.home() / ".resgen" / "credentials"
 
     if username and password:
         return ResgenConnection(
             username, password, host, bucket, auth_provider=auth_provider
         )
 
-    if env_path.exists():
+    if use_dotfile_credentials:
+        env_path = Path.home() / ".resgen" / "credentials"
+    else:
+        env_path = None
+
+    if env_path and env_path.exists():
         load_dotenv(env_path)
 
         username = os.getenv("RESGEN_USERNAME")
