@@ -31,6 +31,7 @@ _track_default_position = {
 
 datatype_default_track = {
     "2d-rectangle-domains": "2d-rectangle-domains",
+    "bedpe": "2d-rectangle-domains",
     "bedlike": "bedlike",
     "chromsizes": "horizontal-chromosome-labels",
     "gene-annotations": "horizontal-gene-annotations",
@@ -152,6 +153,11 @@ FILETYPES = {
         "description": "GFF format",
         "extensions": [".gff", ".gff.gz"],
         "datatypes": ["gene-annotations"],
+    },
+    "bedpe": {
+        "description": "BEDPE format",
+        "extensions": [".bedpe"],
+        "datatatypes": ["bedpe"],
     },
 }
 

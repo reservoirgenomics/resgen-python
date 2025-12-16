@@ -4,6 +4,7 @@ import click
 import os.path as op
 import os
 import logging
+import hashlib
 import resgen as rg
 from resgen.sync.folder import (
     get_local_datasets,
@@ -67,7 +68,7 @@ services:
       - RESGEN_LOCAL_UPLOADS=True
       - SITE_URL=localhost:{port}
       - RESGEN_LICENSE_JWT={resgen_license_jwt}
-    container_name: "resgen-server-container"
+    container_name: "rgc-{name}"
 """
 
 LOGGED_SERVICES = ["nginx", "uwsgi", "celery"]
@@ -180,6 +181,8 @@ def _start(
                     current_container = None
             except subprocess.CalledProcessError:
                 pass
+        else:
+            return current_container["port"]
 
     # Auto-assign port if not provided
     if port is None:
@@ -237,6 +240,7 @@ def _start(
             aws_volume = f"\n      - {aws_creds_path}:/root/.aws"
 
     with open(compose_file, "w") as f:
+        directory_hash = hashlib.md5(directory.encode()).hexdigest()[:8]
         compose_text = START_TEMPLATE.format(
             data_directory=data_directory,
             tmp_directory=tmp_directory,
@@ -250,6 +254,7 @@ def _start(
             resgen_secret_key=get_secret_key(base_directory=join(directory, ".resgen")),
             image=image,
             aws_volume=aws_volume,
+            name=directory_hash,
         )
 
         f.write(compose_text)
@@ -484,7 +489,7 @@ def _get_running_containers():
                 "docker",
                 "ps",
                 "--filter",
-                "name=resgen-server-container",
+                "ancestor=public.ecr.aws/s1s0v0c3/resgen",
                 "--format",
                 "json",
             ],
@@ -544,12 +549,12 @@ def _list_containers():
         print("No running resgen containers found.")
         return
 
-    print(f"{'Directory':<50} {'URL':<25} {'Status':<20}")
+    print(f"{'URL':<25} {'Status':<20} {'Directory':<50}")
     print("-" * 95)
 
     for container in containers:
         url = f"http://localhost:{container['port']}"
-        print(f"{container['directory']:<50} {url:<25} {'Running':<20}\n")
+        print(f"{url:<25} {'Running':<20} {container['directory']:<50}\n")
 
 
 @manage.command()
@@ -562,6 +567,26 @@ def list():
 def ls():
     """List running resgen docker containers with their directories and ports."""
     _list_containers()
+
+
+@manage.command("open")
+@click.argument("directory")
+def cli_open(directory):
+    """Open a browser to the server running in the specified directory."""
+    import webbrowser
+
+    containers = _get_running_containers()
+    directory = op.abspath(directory)
+
+    container = next((c for c in containers if c["directory"] == directory), None)
+
+    if not container:
+        logger.error(f"No running resgen container found for directory: {directory}")
+        return
+
+    url = f"http://localhost:{container['port']}"
+    logger.info(f"Opening {url}")
+    webbrowser.open(url)
 
 
 def fill_in_filetype_datatype_tracktype(file_path, filetype, datatype, tracktype):
@@ -670,7 +695,7 @@ def view(
                 break
         except:
             pass
-        time.sleep(1)
+        time.sleep(0.5)
 
     sys.stdout.write("\n")
     sys.stdout.flush()
