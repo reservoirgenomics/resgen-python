@@ -271,7 +271,7 @@ def _start(
 
 
 @manage.command()
-@click.argument("directory")
+@click.argument("directory", default=".")
 @click.option("--license", type=str, help="The path to the license file to use")
 @click.option(
     "--port",
@@ -432,6 +432,19 @@ def can_sync_datasets(directory, total_tilesets):
             )
 
 
+def _get_directory_url(directory):
+    """Get the URL for a running resgen container in the specified directory."""
+    containers = _get_running_containers()
+    directory = op.abspath(directory)
+    
+    container = next((c for c in containers if c["directory"] == directory), None)
+    
+    if not container:
+        return None
+    
+    return f"http://localhost:{container['port']}"
+
+
 def _sync_datasets(directory):
     """Make sure all the datasets in the directory are represented in the
     resgen project. The resgen project will be named after the directory's
@@ -441,10 +454,12 @@ def _sync_datasets(directory):
 
     user = "local"
     password = "local"
-    host = "http://localhost:1807"
+    host = _get_directory_url(directory)
+    
+    if not host:
+        logger.error(f"No running resgen container found for directory: {directory}")
+        return
 
-    # TODO: Load the docker-compose file from the .resgen folder and
-    # pull the port from there
     try:
         rgc = rg.connect(
             username=user, password=password, host=host, auth_provider="local"
@@ -473,7 +488,7 @@ def _sync_datasets(directory):
 
 
 @manage.command()
-@click.argument("directory")
+@click.argument("directory", default=".")
 def sync_datasets(directory):
     _sync_datasets(directory)
 
@@ -570,21 +585,17 @@ def ls():
 
 
 @manage.command("open")
-@click.argument("directory")
+@click.argument("directory", default=".")
 def cli_open(directory):
     """Open a browser to the server running in the specified directory."""
     import webbrowser
 
-    containers = _get_running_containers()
-    directory = op.abspath(directory)
-
-    container = next((c for c in containers if c["directory"] == directory), None)
-
-    if not container:
+    url = _get_directory_url(directory)
+    
+    if not url:
         logger.error(f"No running resgen container found for directory: {directory}")
         return
 
-    url = f"http://localhost:{container['port']}"
     logger.info(f"Opening {url}")
     webbrowser.open(url)
 
