@@ -436,12 +436,12 @@ def _get_directory_url(directory):
     """Get the URL for a running resgen container in the specified directory."""
     containers = _get_running_containers()
     directory = op.abspath(directory)
-    
+
     container = next((c for c in containers if c["directory"] == directory), None)
-    
+
     if not container:
         return None
-    
+
     return f"http://localhost:{container['port']}"
 
 
@@ -455,7 +455,7 @@ def _sync_datasets(directory):
     user = "local"
     password = "local"
     host = _get_directory_url(directory)
-    
+
     if not host:
         logger.error(f"No running resgen container found for directory: {directory}")
         return
@@ -552,7 +552,8 @@ def _get_running_containers():
                     )
 
         return containers
-    except:
+    except Exception as e:
+        logger.error(f"Error getting running containers: {e}")
         return []
 
 
@@ -591,7 +592,7 @@ def cli_open(directory):
     import webbrowser
 
     url = _get_directory_url(directory)
-    
+
     if not url:
         logger.error(f"No running resgen container found for directory: {directory}")
         return
