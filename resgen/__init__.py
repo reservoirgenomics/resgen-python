@@ -68,10 +68,33 @@ def update_tags(current_tags, **kwargs):
     current_tags.
     """
     for tag in kwargs:
-        current_tags = [t for t in current_tags if not t["name"].startwith(f"{tag}:")]
+        current_tags = [t for t in current_tags if not t["name"].startswith(f"{tag}:")]
         current_tags += [{"name": f"{tag}:{kwargs[tag]}"}]
 
     return current_tags
+
+
+def infer_and_update_dataset_tags(conn, filepath, dataset_uuid):
+    """Infer filetype and datatype from filepath and update dataset with appropriate tags.
+    
+    Args:
+        conn: ResgenConnection instance
+        filepath: Path to the file to analyze
+        dataset_uuid: UUID of the dataset to update
+    """
+    from resgen.utils import fill_filetype_and_datatype
+    
+    filename = filepath.split("/")[-1]
+    filetype, datatype = fill_filetype_and_datatype(filename)
+    
+    if filetype or datatype:
+        tags = []
+        if filetype:
+            tags.append({"name": f"filetype:{filetype}"})
+        if datatype:
+            tags.append({"name": f"datatype:{datatype}"})
+        
+        conn.update_dataset(dataset_uuid, {"tags": tags})
 
 
 def tags_to_datatype(tags):
@@ -700,6 +723,7 @@ class ResgenProject:
         if "error" in content:
             raise ResgenError(content["error"])
 
+        infer_and_update_dataset_tags(self.conn, filepath, content["uuid"])
         return content["uuid"]
 
     def add_s3_dataset(
@@ -746,6 +770,7 @@ class ResgenProject:
         if "error" in content:
             raise ResgenError(content["error"])
 
+        infer_and_update_dataset_tags(self.conn, filepath, content["uuid"])
         return content["uuid"]
 
     def add_download_dataset(self, filepath: str, index_filepath: str = None):
@@ -809,6 +834,7 @@ class ResgenProject:
                     f"\r {percent_done:.3f}% Complete ({transferred} of {to_transfer})"
                 )
 
+        infer_and_update_dataset_tags(self.conn, filepath, content["uuid"])
         return content["uuid"]
 
     def add_upload_dataset(
@@ -866,6 +892,7 @@ class ResgenProject:
             raise UnknownConnectionException("Failed to finish uploading file", ret)
 
         content = json.loads(ret.content)
+        infer_and_update_dataset_tags(self.conn, filepath, content["uuid"])
         return content["uuid"]
 
     def add_dataset(
