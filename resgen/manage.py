@@ -6,6 +6,7 @@ import os
 import logging
 import hashlib
 import resgen as rg
+from os.path import abspath
 from resgen.sync.folder import (
     get_local_datasets,
     get_remote_datasets,
@@ -240,7 +241,7 @@ def _start(
             aws_volume = f"\n      - {aws_creds_path}:/root/.aws"
 
     with open(compose_file, "w") as f:
-        directory_hash = hashlib.md5(directory.encode()).hexdigest()[:8]
+        directory_hash = hashlib.md5(abspath(directory).encode()).hexdigest()[:8]
         compose_text = START_TEMPLATE.format(
             data_directory=data_directory,
             tmp_directory=tmp_directory,
@@ -308,7 +309,7 @@ def start(directory, license, port, platform, image, foreground, use_aws_creds):
 
 
 @manage.command()
-@click.argument("directory")
+@click.argument("directory", default=".")
 def stop(directory):
     """Stop a running instance."""
     compose_file = get_compose_file(directory)
@@ -317,7 +318,7 @@ def stop(directory):
 
 
 @manage.command()
-@click.argument("directory")
+@click.argument("directory", default=".")
 @click.argument("service", type=click.Choice(LOGGED_SERVICES), required=False)
 def logs(directory, service=None):
     """Get the nginx logs for the resgen instance deployed at
@@ -342,7 +343,7 @@ def logs(directory, service=None):
 
 
 @manage.command()
-@click.argument("directory")
+@click.argument("directory", default=".")
 @click.option("--style", type=click.Choice(["run", "exec"]), default="run")
 def shell(directory, style):
     """Open a shell in the Docker container hosting the repo.
@@ -350,6 +351,8 @@ def shell(directory, style):
     The style specifies whether to open a shell in a new container or an
     existing one.
     """
+    directory_hash = hashlib.md5(abspath(directory).encode()).hexdigest()[:8]
+
     if style == "run":
         run(
             [
@@ -363,18 +366,21 @@ def shell(directory, style):
             ]
         )
     else:
-        run(["docker", "exec", "-it", "resgen-server-container", "bash"])
+        run(["docker", "exec", "-it", f"rgc-{directory_hash}", "bash"])
 
 
 def _create_user(directory, username, password):
     """Create a resgen user."""
     # print("-c", f"\"import django.contrib.auth; django.contrib.auth.models.User.objects.create_user('{username}', password='{password}')\"")
     compose_file = get_compose_file(directory)
+    print("compose_file", compose_file)
 
     run(
         [
             "docker",
             "compose",
+            "--project-directory",
+            directory,
             "-f",
             compose_file,
             "run",
@@ -384,12 +390,13 @@ def _create_user(directory, username, password):
             "shell",
             "-c",
             f"import django.contrib.auth; django.contrib.auth.models.User.objects.create_user('{username}', password='{password}')",
+            # f"import os; print(os.environ)",
         ]
     )
 
 
 @manage.command()
-@click.argument("directory")
+@click.argument("directory", default=".")
 def create_user(directory):
     """Add a user to a local resgen instance."""
     username = input("Username?\n")
@@ -399,7 +406,7 @@ def create_user(directory):
 
 
 @manage.command()
-@click.argument("directory")
+@click.argument("directory", default=".")
 def create_superuser(directory):
     """Add a user to a local resgen instance."""
     compose_file = get_compose_file(directory)
@@ -408,6 +415,8 @@ def create_superuser(directory):
         [
             "docker",
             "compose",
+            "--project-directory",
+            directory,
             "-f",
             compose_file,
             "run",
