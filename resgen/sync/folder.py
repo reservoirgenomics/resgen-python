@@ -72,7 +72,7 @@ def get_local_datasets(directory):
             index_path = f"{d['fullpath']}.{index_extension}"
             if index_path in by_fullpath:
                 d["index_filepath"] = index_path
-                if index_extension in [".bai", ".tbi"]:
+                if index_extension in ["bai", "tbi"]:
                     # We have no use for .bai files outside of as indexes
                     # .fai files we can add as chromsizes
                     to_remove.add(index_path)

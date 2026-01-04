@@ -121,6 +121,11 @@ FILETYPES = {
         "extensions": [".mcool"],
         "datatypes": ["matrix"],
     },
+    "fasta_seq": {
+        "description": "Fasta sequence file",
+        "extensions": [".fa", "fna"],
+        "datatypes": ["sequence"],
+    },
     "bigwig": {
         "description": "Genomics focused multi-resolution vector file",
         "extensions": [".bw", ".bigwig"],
