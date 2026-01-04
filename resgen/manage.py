@@ -151,7 +151,7 @@ def _start(
     in the directory.
     """
     # Check if AWS credentials are loaded in existing container
-    running_containers = _get_running_containers()
+    running_containers = _get_running_containers(image)
     current_container = next(
         (c for c in running_containers if c["directory"] == directory), None
     )
@@ -441,9 +441,9 @@ def can_sync_datasets(directory, total_tilesets):
             )
 
 
-def _get_directory_url(directory):
+def _get_directory_url(directory, image=DEFAULT_IMAGE):
     """Get the URL for a running resgen container in the specified directory."""
-    containers = _get_running_containers()
+    containers = _get_running_containers(image=image)
     directory = op.abspath(directory)
 
     container = next((c for c in containers if c["directory"] == directory), None)
@@ -454,7 +454,7 @@ def _get_directory_url(directory):
     return f"http://localhost:{container['port']}"
 
 
-def _sync_datasets(directory):
+def _sync_datasets(directory, image=DEFAULT_IMAGE):
     """Make sure all the datasets in the directory are represented in the
     resgen project. The resgen project will be named after the directory's
     basename."""
@@ -463,7 +463,7 @@ def _sync_datasets(directory):
 
     user = "local"
     password = "local"
-    host = _get_directory_url(directory)
+    host = _get_directory_url(directory, image=image)
 
     if not host:
         logger.error(f"No running resgen container found for directory: {directory}")
@@ -498,11 +498,12 @@ def _sync_datasets(directory):
 
 @manage.command()
 @click.argument("directory", default=".")
-def sync_datasets(directory):
-    _sync_datasets(directory)
+@click.option("-i", "--image", default=DEFAULT_IMAGE)
+def sync_datasets(directory, image):
+    _sync_datasets(directory, image=image)
 
 
-def _get_running_containers():
+def _get_running_containers(image=DEFAULT_IMAGE):
     """Get running resgen containers data."""
     import subprocess
     import json
@@ -513,7 +514,7 @@ def _get_running_containers():
                 "docker",
                 "ps",
                 "--filter",
-                "ancestor=public.ecr.aws/s1s0v0c3/resgen",
+                f"ancestor={image}",
                 "--format",
                 "json",
             ],
@@ -566,9 +567,9 @@ def _get_running_containers():
         return []
 
 
-def _list_containers():
+def _list_containers(image=DEFAULT_IMAGE):
     """Print running resgen containers."""
-    containers = _get_running_containers()
+    containers = _get_running_containers(image)
 
     if not containers:
         print("No running resgen containers found.")
@@ -583,15 +584,17 @@ def _list_containers():
 
 
 @manage.command()
-def list():
+@click.option("-i", "--image", default=DEFAULT_IMAGE)
+def list(image):
     """List running resgen docker containers with their directories and ports."""
-    _list_containers()
+    _list_containers(image)
 
 
 @manage.command()
-def ls():
+@click.option("-i", "--image", default=DEFAULT_IMAGE)
+def ls(image):
     """List running resgen docker containers with their directories and ports."""
-    _list_containers()
+    _list_containers(image)
 
 
 @manage.command("open")
