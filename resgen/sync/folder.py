@@ -78,7 +78,9 @@ def get_local_datasets(directory):
                     to_remove.add(index_path)
 
         # Check if FASTA files (.fa, .fna) need .fai index generation
-        if d["fullpath"].endswith((".fa", ".fna")) and not d.get("index_filepath"):
+        if d["fullpath"].endswith((".fa", ".fna", ".fasta")) and not d.get(
+            "index_filepath"
+        ):
             generate_fai_index_if_needed(d, directory)
 
     local_datasets = [d for d in local_datasets if d["fullpath"] not in to_remove]

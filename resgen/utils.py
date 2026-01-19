@@ -123,7 +123,7 @@ FILETYPES = {
     },
     "fasta_seq": {
         "description": "Fasta sequence file",
-        "extensions": [".fa", "fna"],
+        "extensions": [".fa", ".fna", ".fasta"],
         "datatypes": ["sequence"],
     },
     "bigwig": {

@@ -1,3 +1,8 @@
+## v0.11.0
+
+- Automatically create fasta indexes for .fa files
+- Create horizontal-transcripts track for gff files
+
 ## v0.9.1
 
 - View private files on S3
