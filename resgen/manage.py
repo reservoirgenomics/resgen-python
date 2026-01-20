@@ -613,6 +613,28 @@ def cli_open(directory):
     webbrowser.open(url)
 
 
+@manage.command()
+@click.option("-i", "--image", default=DEFAULT_IMAGE)
+def update(image):
+    """Pull the latest resgen image.
+
+    Does the same thing as the "pull" command below
+    """
+    run(["docker", "pull", image])
+    logger.info(f"Updated image: {image}")
+
+
+@manage.command()
+@click.option("-i", "--image", default=DEFAULT_IMAGE)
+def pull(image):
+    """Pull the latest resgen image.
+
+    Alias of "update"
+    """
+    run(["docker", "pull", image])
+    logger.info(f"Updated image: {image}")
+
+
 def fill_in_filetype_datatype_tracktype(file_path, filetype, datatype, tracktype):
     """Fill in missing filetype, datatype and tracktype values by inferring them from a file.
 

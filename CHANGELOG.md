@@ -1,3 +1,7 @@
+## v0.12.0
+
+- Added update command to pull the latest Docker image
+
 ## v0.11.0
 
 - Automatically create fasta indexes for .fa files
