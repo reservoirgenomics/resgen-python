@@ -1,3 +1,7 @@
+## v0.12.2
+
+- Update default datatype for gff files to gene-transcripts
+
 ## v0.12.1
 
 - Fix license reading when starting local

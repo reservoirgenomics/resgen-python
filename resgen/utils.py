@@ -36,6 +36,7 @@ datatype_default_track = {
     "bedlike": "bedlike",
     "chromsizes": "horizontal-chromosome-labels",
     "gene-annotations": "horizontal-gene-annotations",
+    "gene-transcripts": "horizontal-transcripts",
     "gff-annotations": "horizontal-transcripts",
     "matrix": "heatmap",
     "vector": "horizontal-bar",
@@ -159,7 +160,7 @@ FILETYPES = {
     "gff": {
         "description": "GFF format",
         "extensions": [".gff", ".gff.gz"],
-        "datatypes": ["gene-annotations"],
+        "datatypes": ["gene-transcripts"],
     },
     "bedpe": {
         "description": "BEDPE format",
