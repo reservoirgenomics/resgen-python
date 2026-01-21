@@ -23,16 +23,17 @@ oQIDAQAB
 
 
 class LicenseInfo(BaseModel):
-    permissions: Literal["admin", "guest", "subscription"]
+    permissions: Literal["admin", "guest", "member"]
     username: str
 
 
 class LicenseError(Exception):
     pass
 
+
 def datasets_allowed(license: LicenseInfo) -> int:
     """Return the number of datasets allowed by the license."""
-    if license.permissions == "admin" or license.permissions == 'subscription':
+    if license.permissions == "admin" or license.permissions == "member":
         return 1000000
     elif license.permissions == "guest":
         return 10
@@ -61,13 +62,13 @@ def get_license(filepath: Optional[str] = None) -> LicenseInfo:
     env var. If there's no license there then return a guest license."""
     if filepath:
         with open(filepath, "r") as f:
-            license_txt = f.read()
+            license_txt = f.read().strip()
 
             if not license_txt:
                 # Empty license file
                 return guest_license()
-            
-            return license_info(f.read())
+
+            return license_info(license_txt)
 
     LICENSE_JWT = os.environ.get("RESGEN_LICENSE_JWT")
 

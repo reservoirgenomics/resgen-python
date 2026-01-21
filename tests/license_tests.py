@@ -5,6 +5,7 @@ import pytest
 from os.path import join
 from tempfile import TemporaryDirectory
 
+
 class TestLicense:
 
     def test_get_license_2(self):
@@ -32,16 +33,16 @@ class TestLicense:
 
         # Mock the license_info function
         def mock_license_info(jwt):
-            return LicenseInfo(permissions="subscription", username="testuser")
+            return LicenseInfo(permissions="member", username="testuser")
 
-        with patch('resgen.license.license_info', mock_license_info):
+        with patch("resgen.license.license_info", mock_license_info):
             try:
                 # Call the function under test
                 result = get_license(None)
 
                 # Assert the result
                 assert isinstance(result, LicenseInfo)
-                assert result.permissions == "subscription"
+                assert result.permissions == "member"
                 assert result.username == "testuser"
             finally:
                 # Clean up: restore the original license_info function and remove the environment variable
@@ -52,7 +53,7 @@ class TestLicense:
         Test get_license when RESGEN_LICENSE_JWT environment variable is empty.
         This should return a guest license.
         """
-        os.environ['RESGEN_LICENSE_JWT'] = ''
+        os.environ["RESGEN_LICENSE_JWT"] = ""
         result = get_license(None)
         assert isinstance(result, LicenseInfo)
         assert result.permissions == "guest"
@@ -71,8 +72,8 @@ class TestLicense:
         Test get_license when RESGEN_LICENSE_JWT environment variable is not set.
         This should return a guest license.
         """
-        if 'RESGEN_LICENSE_JWT' in os.environ:
-            del os.environ['RESGEN_LICENSE_JWT']
+        if "RESGEN_LICENSE_JWT" in os.environ:
+            del os.environ["RESGEN_LICENSE_JWT"]
         result = get_license(None)
         assert isinstance(result, LicenseInfo)
         assert result.permissions == "guest"
@@ -86,13 +87,12 @@ class TestLicense:
         """
         # Create a temporary license file
         with TemporaryDirectory() as tmpdir:
-            temp_license_file = join(tmpdir, 'temp_license.txt')
+            temp_license_file = join(tmpdir, "temp_license.txt")
 
-            with open(temp_license_file, 'w') as f:
-                f.write('x123')
+            with open(temp_license_file, "w") as f:
+                f.write("x123")
 
-            with patch('resgen.license.license_info') as mock_license_info:
+            with patch("resgen.license.license_info") as mock_license_info:
                 # Mock the license_info function to return a LicenseInfo object
                 get_license(temp_license_file)
-                mock_license_info.assert_called_with('x123')
-
+                mock_license_info.assert_called_with("x123")

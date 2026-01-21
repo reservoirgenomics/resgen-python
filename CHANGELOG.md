@@ -1,3 +1,7 @@
+## v0.12.1
+
+- Fix license reading when starting local
+
 ## v0.12.0
 
 - Added update command to pull the latest Docker image
