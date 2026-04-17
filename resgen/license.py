@@ -6,6 +6,7 @@ import json
 import hashlib
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 import os
 from functools import lru_cache
@@ -90,7 +91,7 @@ def license_info(license_jwt: str):
     signing_input = f"{encoded_header}.{encoded_payload}".encode()
     signature = b64url_decode(encoded_signature)
 
-    public_key = serialization.load_pem_public_key(PUBLIC_KEY.encode("utf-8"))
+    public_key = serialization.load_pem_public_key(PUBLIC_KEY.encode("utf-8"), backend=default_backend())
     # Verify the signature
     try:
         public_key.verify(signature, signing_input, padding.PKCS1v15(), hashes.SHA256())

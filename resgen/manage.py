@@ -63,6 +63,7 @@ services:
       - RESGEN_AWS_BUCKET_PREFIX=tmp
       - RESGEN_AWS_BUCKET_MOUNT_POINT=aws
       - RESGEN_MEDIA_ROOT=/media/
+      - RESGEN_HTTP_VERIFY_SSL=false
       - SITE_URL=localhost
       - CELERY_BROKER=rabbitmq:5672
       - RESGEN_LOCAL_JWT_AUTH=True
@@ -437,7 +438,9 @@ def can_sync_datasets(directory, total_tilesets):
 
         if total_tilesets > datasets_allowed(license):
             raise LicenseError(
-                f"Guest license has exceeded the number of datasets allowed ({datasets_allowed(license)})"
+                f"Guest license has exceeded the number of datasets allowed ({datasets_allowed(license)}). "
+                "Please go to resgen.io to create a subscription. Any resgen.io subscription "
+                "will allow you to view an arbitrary number of datasets."
             )
 
 
@@ -771,12 +774,15 @@ def view(
 
     if not tileset:
         # need to add the dataset
-        if file_path.startswith("s3"):
-            uuid = project.add_s3_dataset(file_path)
-        else:
-            dataset_rel_path = op.relpath(file_path, directory)
-            logger.info("Adding link dataset: %s", dataset_rel_path)
-            uuid = project.add_link_dataset(dataset_rel_path)
+        try:
+            if file_path.startswith("s3"):
+                uuid = project.add_s3_dataset(file_path)
+            else:
+                dataset_rel_path = op.relpath(file_path, directory)
+                logger.info("Adding link dataset: %s", dataset_rel_path)
+                uuid = project.add_link_dataset(dataset_rel_path)
+        except ResgenError as e:
+            raise click.ClickException(str(e))
 
         tileset = rgc.get_dataset(uuid)
 
