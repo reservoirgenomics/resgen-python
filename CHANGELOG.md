@@ -1,3 +1,8 @@
+## v0.13.0
+
+- Add `resgen manage pileup` command to align CSV sequences against a reference FASTA and display as a pileup
+- Fix `_get_running_containers` to detect containers by name prefix (`rgc-`) rather than image ancestor, preventing port conflicts when multiple image versions are running
+
 ## v0.12.2
 
 - Update default datatype for gff files to gene-transcripts

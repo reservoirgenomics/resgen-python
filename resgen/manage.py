@@ -151,6 +151,23 @@ def _start(
     If not, a new one will be created and populated with all of the files
     in the directory.
     """
+    # Resolve license text before checking running containers so we can detect
+    # if the license has changed and the container needs a restart
+    if not license:
+        home_license = os.path.expanduser("~/.resgen/license.jwt")
+        if op.exists(home_license):
+            logger.info("Using license from ~/.resgen/license.jwt")
+            license_text = open(home_license, "r").read()
+        else:
+            logger.warning(
+                "No license file provided, default to guest license. "
+                "This will limit the use of this software to a maximum of 20 files "
+                "per project."
+            )
+            license_text = ""
+    else:
+        license_text = open(license, "r").read()
+
     # Check if AWS credentials are loaded in existing container
     running_containers = _get_running_containers(image)
     current_container = next(
@@ -158,11 +175,12 @@ def _start(
     )
 
     if current_container:
+        import subprocess
+        needs_restart = False
+
         if use_aws_creds:
             # If we need to use aws credentials then we need to make sure
             # they're mounted in the docker container
-            import subprocess
-
             try:
                 result = subprocess.run(
                     [
@@ -179,10 +197,23 @@ def _start(
                     logger.info(
                         "AWS credentials not mounted, restarting container with credentials..."
                     )
-                    stop(directory)
-                    current_container = None
+                    needs_restart = True
             except subprocess.CalledProcessError:
                 pass
+
+        if not needs_restart:
+            # Check if the license has changed since the container was last started
+            cached_license_path = join(directory, ".resgen/license.jwt")
+            if op.exists(cached_license_path):
+                with open(cached_license_path, "r") as f:
+                    cached_license = f.read()
+                if cached_license != license_text:
+                    logger.info("License has changed, restarting container...")
+                    needs_restart = True
+
+        if needs_restart:
+            stop(directory)
+            current_container = None
         else:
             return current_container["port"]
 
@@ -200,16 +231,6 @@ def _start(
         platform = "linux/amd64"
 
     logger.info("Using platform: %s", platform)
-
-    if not license:
-        logger.warning(
-            "No license file provided, default to guest license. "
-            "This will limit the use of this software to a maximum of 20 files "
-            "per project."
-        )
-        license_text = ""
-    else:
-        license_text = open(license, "r").read()
 
     compose_file = get_compose_file(directory)
     compose_directory = op.dirname(compose_file)
@@ -517,7 +538,7 @@ def _get_running_containers(image=DEFAULT_IMAGE):
                 "docker",
                 "ps",
                 "--filter",
-                f"ancestor={image}",
+                "name=rgc-",
                 "--format",
                 "json",
             ],
@@ -813,6 +834,169 @@ def view(
 
     # Save viewconf and get URL
     saved_viewconf = project.add_viewconf(viewconf.viewconf().dict(), "View dataset")
+    url = f"http://localhost:{port}/viewer/{saved_viewconf['uuid']}?at={token['access_token']}&rt={token['refresh_token']}"
+
+    logger.info(f"Opening {url}")
+    webbrowser.open(url)
+
+
+@manage.command()
+@click.argument("file")
+@click.option(
+    "-ref",
+    "--reference",
+    required=True,
+    help="Reference FASTA file to align sequences against",
+)
+@click.option("-t", "--tag", multiple=True, help="Pass in tags (e.g. colname:sequence)")
+@click.option("-th", "--track-height", default=100)
+@click.option("--image", default=DEFAULT_IMAGE)
+@click.option("--platform", default=None)
+def pileup(file, reference, tag, track_height, image, platform):
+    """Align sequences in a CSV file against a reference FASTA and display as a pileup."""
+    import webbrowser
+    import time
+    import requests
+
+    csv_path = op.abspath(file)
+    fasta_path = op.abspath(reference)
+
+    if not op.isfile(fasta_path):
+        raise click.ClickException(f"Reference file not found: {fasta_path}")
+
+    if csv_path == fasta_path:
+        raise click.ClickException(
+            "The reference file and the pileup file cannot be the same file"
+        )
+
+    tag_names = [t.split(":")[0] for t in tag]
+    if "colname" not in tag_names and "colnum" not in tag_names:
+        raise click.ClickException(
+            "A column must be specified with -t colname:<name> or -t colnum:<number>"
+        )
+
+    # Validate that the specified column exists in the CSV file
+    import csv as csv_module
+
+    colname_tag = next((t for t in tag if t.startswith("colname:")), None)
+    colnum_tag = next((t for t in tag if t.startswith("colnum:")), None)
+    header_tag = next((t for t in tag if t.startswith("header:")), None)
+    has_header = header_tag is None or header_tag.split(":", 1)[1].lower() != "false"
+
+    try:
+        with open(csv_path, "r") as f:
+            first_row = next(csv_module.reader(f), None)
+
+        if first_row is None:
+            raise click.ClickException(f"CSV file is empty: {csv_path}")
+
+        if colname_tag and has_header:
+            colname = colname_tag.split(":", 1)[1]
+            if colname not in first_row:
+                raise click.ClickException(
+                    f"Column '{colname}' not found in {op.basename(csv_path)}. "
+                    f"Available columns: {', '.join(first_row)}"
+                )
+        elif colnum_tag:
+            colnum = int(colnum_tag.split(":", 1)[1])
+            if colnum < 1 or colnum > len(first_row):
+                raise click.ClickException(
+                    f"Column number {colnum} is out of range: file has {len(first_row)} column(s)"
+                )
+    except (IOError, OSError) as e:
+        raise click.ClickException(f"Could not read CSV file: {e}")
+
+    # Derive assembly name from the FASTA filename stem (e.g. "ref.fa" -> "ref")
+    assembly_name = op.splitext(op.basename(fasta_path))[0]
+
+    # Determine the directory to mount in Docker (common ancestor of both files)
+    common = op.commonpath([csv_path, fasta_path])
+    directory = common if op.isdir(common) else op.dirname(common)
+
+    logger.info("csv_path %s", csv_path)
+    logger.info("fasta_path %s", fasta_path)
+    logger.info("assembly_name %s", assembly_name)
+    logger.info("directory %s", directory)
+
+    port = _start(
+        directory=directory,
+        license=None,
+        image=image,
+        foreground=False,
+        platform=platform,
+        use_aws_creds=False,
+    )
+
+    sys.stdout.write("Waiting for server to start...")
+    sys.stdout.flush()
+    for i in range(30):
+        sys.stdout.write(".")
+        sys.stdout.flush()
+        try:
+            response = requests.get(
+                f"http://localhost:{port}/api/v1/tilesets/",
+                timeout=2,
+            )
+            if response.status_code == 200:
+                break
+        except:
+            pass
+        time.sleep(0.5)
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+    rgc = rg.connect(
+        host=f"http://localhost:{port}",
+        auth_provider="local",
+        use_dotfile_credentials=False,
+    )
+
+    project = rgc.find_or_create_project(op.basename(directory))
+    token = rgc.get_local_token()
+
+    def find_or_add_tileset(file_path):
+        """Find an existing tileset by filename in the project, or add it."""
+        filename = op.basename(file_path)
+        for ts in project.list_datasets():
+            if filename in ts.datafile:
+                return rgc.get_dataset(ts.uuid)
+        rel_path = op.relpath(file_path, directory)
+        try:
+            uuid = project.add_link_dataset(rel_path)
+        except ResgenError as e:
+            raise click.ClickException(str(e))
+        return rgc.get_dataset(uuid)
+
+    # Register FASTA tileset
+    fasta_tileset = find_or_add_tileset(fasta_path)
+    rgc.update_dataset(
+        fasta_tileset.uuid,
+        {
+            "tags": [
+                {"name": "filetype:fasta_seq"},
+                {"name": "datatype:sequence"},
+                {"name": f"assembly:{assembly_name}"},
+            ]
+        },
+    )
+
+    # Register CSV tileset (no refrow — association is via assembly tag)
+    csv_tileset = find_or_add_tileset(csv_path)
+    csv_tags = [
+        {"name": "filetype:pileup-csv"},
+        {"name": "datatype:reads"},
+        {"name": f"assembly:{assembly_name}"},
+    ]
+    for t in tag:
+        csv_tags.append({"name": t})
+    rgc.update_dataset(csv_tileset.uuid, {"tags": csv_tags})
+
+    from higlass import view as hg_view
+
+    track = csv_tileset.hg_track(track_type="pileup", position="top", height=track_height)
+    viewconf = hg_view(track)
+
+    saved_viewconf = project.add_viewconf(viewconf.viewconf().dict(), "Pileup view")
     url = f"http://localhost:{port}/viewer/{saved_viewconf['uuid']}?at={token['access_token']}&rt={token['refresh_token']}"
 
     logger.info(f"Opening {url}")
