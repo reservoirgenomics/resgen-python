@@ -27,6 +27,8 @@ _track_default_position = {
     "viewport-projection-center": "center",
     "viewport-projection-horizontal": "top",
     "pileup": "top",
+    "horizontal-sequence": "top",
+    "horizontal-chromosome-labels": "top",
 }
 
 

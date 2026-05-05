@@ -967,18 +967,73 @@ def pileup(file, reference, tag, track_height, image, platform):
             raise click.ClickException(str(e))
         return rgc.get_dataset(uuid)
 
-    # Register FASTA tileset
+    # Generate .fai index if needed before registering the FASTA tileset, so
+    # we can include the indexfile in the same update call as the tags.
+    # TilesetSerializer.update removes any tag not present in the PATCH body,
+    # so two separate calls would wipe the tags set by the first call.
+    fai_path = fasta_path + ".fai"
+    if not op.isfile(fai_path):
+        import subprocess
+
+        try:
+            subprocess.run(
+                ["samtools", "faidx", fasta_path],
+                check=True,
+                capture_output=True,
+            )
+            logger.info("Generated .fai index for %s", fasta_path)
+        except subprocess.CalledProcessError as e:
+            logger.warning("Could not generate .fai index: %s", e)
+        except FileNotFoundError:
+            logger.warning("samtools not found; chromsizes and sequence tracks will be skipped")
+
+    # Register FASTA tileset — include indexfile in the same call as tags so
+    # the serializer doesn't clear the tags when setting indexfile.
     fasta_tileset = find_or_add_tileset(fasta_path)
-    rgc.update_dataset(
-        fasta_tileset.uuid,
-        {
-            "tags": [
-                {"name": "filetype:fasta_seq"},
-                {"name": "datatype:sequence"},
-                {"name": f"assembly:{assembly_name}"},
-            ]
-        },
-    )
+    fasta_update = {
+        "tags": [
+            {"name": "filetype:fasta_seq"},
+            {"name": "datatype:sequence"},
+            {"name": f"assembly:{assembly_name}"},
+        ]
+    }
+    if op.isfile(fai_path):
+        fasta_update["indexfile"] = op.relpath(fai_path, directory)
+    rgc.update_dataset(fasta_tileset.uuid, fasta_update)
+
+    chromsizes_tileset = None
+    if op.isfile(fai_path):
+        rel_fai_path = op.relpath(fai_path, directory)
+
+        # Try to register the .fai as a separate chromsizes-tsv tileset so that
+        # the horizontal-chromosome-labels track can use it.  This may fail when
+        # the guest-license dataset limit is already reached; in that case we
+        # skip the chromosome-labels track but the sequence track still works
+        # because the indexfile is already set above.
+        fai_filename = op.basename(fai_path)
+        try:
+            existing = next(
+                (ts for ts in project.list_datasets() if fai_filename in ts.datafile),
+                None,
+            )
+            if existing:
+                chromsizes_tileset = rgc.get_dataset(existing.uuid)
+            else:
+                uuid = project.add_link_dataset(rel_fai_path)
+                chromsizes_tileset = rgc.get_dataset(uuid)
+
+            rgc.update_dataset(
+                chromsizes_tileset.uuid,
+                {
+                    "tags": [
+                        {"name": "filetype:chromsizes-tsv"},
+                        {"name": "datatype:chromsizes"},
+                        {"name": f"assembly:{assembly_name}"},
+                    ]
+                },
+            )
+        except ResgenError as e:
+            logger.warning("Could not register chromsizes tileset: %s; chromosome-labels track will be skipped", e)
 
     # Register CSV tileset (no refrow — association is via assembly tag)
     csv_tileset = find_or_add_tileset(csv_path)
@@ -993,8 +1048,23 @@ def pileup(file, reference, tag, track_height, image, platform):
 
     from higlass import view as hg_view
 
-    track = csv_tileset.hg_track(track_type="pileup", position="top", height=track_height)
-    viewconf = hg_view(track)
+    pileup_track = csv_tileset.hg_track(track_type="pileup", position="top", height=track_height)
+
+    tracks = []
+    if chromsizes_tileset:
+        tracks.append(
+            chromsizes_tileset.hg_track(
+                track_type="horizontal-chromosome-labels", position="top", height=20
+            )
+        )
+    if op.isfile(fai_path):
+        tracks.append(
+            fasta_tileset.hg_track(
+                track_type="horizontal-sequence", position="top", height=40
+            )
+        )
+    tracks.append(pileup_track)
+    viewconf = hg_view(*tracks)
 
     saved_viewconf = project.add_viewconf(viewconf.viewconf().dict(), "Pileup view")
     url = f"http://localhost:{port}/viewer/{saved_viewconf['uuid']}?at={token['access_token']}&rt={token['refresh_token']}"

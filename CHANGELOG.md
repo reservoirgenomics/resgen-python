@@ -1,3 +1,9 @@
+## v0.13.1
+
+- Add chromsizes and sequence tracks to `resgen manage pileup` view: generates `.fai` index if absent, registers it as `chromsizes-tsv`, and adds `horizontal-chromosome-labels` and `horizontal-sequence` tracks above the pileup track
+- Fix 500 on sequence tiles caused by `indexfile` being unset on the FASTA tileset; `indexfile` is now included in the same PATCH as the tags to avoid `TilesetSerializer` clearing tags on a second update
+- Degrade gracefully when the dataset limit is reached: chromosome-labels track is skipped but sequence and pileup tracks are still shown
+
 ## v0.13.0
 
 - Add `resgen manage pileup` command to align CSV sequences against a reference FASTA and display as a pileup
