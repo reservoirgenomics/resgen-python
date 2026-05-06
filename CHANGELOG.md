@@ -1,5 +1,6 @@
-## v0.13.2
+## v0.14.0
 
+- Save credentials to `<directory>/.resgen/credentials` after the first login prompt for `resgen manage view` and `resgen manage pileup`, so subsequent runs in the same directory don't re-prompt
 - `resgen manage pileup` now accepts multiple CSV files; each is opened as a separate view arranged in a grid whose column-to-row ratio approximates the golden ratio
 - Each pileup track displays its source filename as a label in the bottom-left corner in dark grey
 

@@ -776,7 +776,7 @@ def view(
     rgc = rg.connect(
         host=f"http://localhost:{port}",
         auth_provider="local",
-        use_dotfile_credentials=False,
+        credentials_dir=directory,
     )
 
     project = rgc.find_or_create_project(op.basename(directory))
@@ -952,7 +952,7 @@ def pileup(files, reference, tag, track_height, image, platform):
     rgc = rg.connect(
         host=f"http://localhost:{port}",
         auth_provider="local",
-        use_dotfile_credentials=False,
+        credentials_dir=directory,
     )
 
     project = rgc.find_or_create_project(op.basename(directory))

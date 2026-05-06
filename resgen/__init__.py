@@ -1183,6 +1183,7 @@ def connect(
     bucket: str = RESGEN_BUCKET,
     auth_provider: str = "auth0",
     use_dotfile_credentials: bool = True,
+    credentials_dir: str = None,
 ) -> ResgenConnection:
     """Open a connection to resgen."""
 
@@ -1191,7 +1192,9 @@ def connect(
             username, password, host, bucket, auth_provider=auth_provider
         )
 
-    if use_dotfile_credentials:
+    if credentials_dir is not None:
+        env_path = Path(credentials_dir) / ".resgen" / "credentials"
+    elif use_dotfile_credentials:
         env_path = Path.home() / ".resgen" / "credentials"
     else:
         env_path = None
@@ -1204,6 +1207,12 @@ def connect(
     else:
         username = input("Username:")
         password = getpass.getpass("Password:")
+
+        if env_path is not None:
+            env_path.parent.mkdir(parents=True, exist_ok=True)
+            env_path.write_text(f"RESGEN_USERNAME={username}\nRESGEN_PASSWORD={password}\n")
+            env_path.chmod(0o600)
+            print(f"Credentials saved to {env_path}")
 
     if username is None:
         username = os.getenv("RESGEN_USERNAME")
