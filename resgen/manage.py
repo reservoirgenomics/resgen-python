@@ -841,7 +841,7 @@ def view(
 
 
 @manage.command()
-@click.argument("file")
+@click.argument("files", nargs=-1, required=True)
 @click.option(
     "-ref",
     "--reference",
@@ -852,22 +852,24 @@ def view(
 @click.option("-th", "--track-height", default=100)
 @click.option("--image", default=DEFAULT_IMAGE)
 @click.option("--platform", default=None)
-def pileup(file, reference, tag, track_height, image, platform):
-    """Align sequences in a CSV file against a reference FASTA and display as a pileup."""
+def pileup(files, reference, tag, track_height, image, platform):
+    """Align sequences in one or more CSV files against a reference FASTA and display as a pileup."""
+    import math
     import webbrowser
     import time
     import requests
 
-    csv_path = op.abspath(file)
+    csv_paths = [op.abspath(f) for f in files]
     fasta_path = op.abspath(reference)
 
     if not op.isfile(fasta_path):
         raise click.ClickException(f"Reference file not found: {fasta_path}")
 
-    if csv_path == fasta_path:
-        raise click.ClickException(
-            "The reference file and the pileup file cannot be the same file"
-        )
+    for csv_path in csv_paths:
+        if csv_path == fasta_path:
+            raise click.ClickException(
+                "The reference file and the pileup file cannot be the same file"
+            )
 
     tag_names = [t.split(":")[0] for t in tag]
     if "colname" not in tag_names and "colnum" not in tag_names:
@@ -875,7 +877,7 @@ def pileup(file, reference, tag, track_height, image, platform):
             "A column must be specified with -t colname:<name> or -t colnum:<number>"
         )
 
-    # Validate that the specified column exists in the CSV file
+    # Validate that the specified column exists in each CSV file
     import csv as csv_module
 
     colname_tag = next((t for t in tag if t.startswith("colname:")), None)
@@ -883,37 +885,39 @@ def pileup(file, reference, tag, track_height, image, platform):
     header_tag = next((t for t in tag if t.startswith("header:")), None)
     has_header = header_tag is None or header_tag.split(":", 1)[1].lower() != "false"
 
-    try:
-        with open(csv_path, "r") as f:
-            first_row = next(csv_module.reader(f), None)
+    for csv_path in csv_paths:
+        try:
+            with open(csv_path, "r") as f:
+                first_row = next(csv_module.reader(f), None)
 
-        if first_row is None:
-            raise click.ClickException(f"CSV file is empty: {csv_path}")
+            if first_row is None:
+                raise click.ClickException(f"CSV file is empty: {csv_path}")
 
-        if colname_tag and has_header:
-            colname = colname_tag.split(":", 1)[1]
-            if colname not in first_row:
-                raise click.ClickException(
-                    f"Column '{colname}' not found in {op.basename(csv_path)}. "
-                    f"Available columns: {', '.join(first_row)}"
-                )
-        elif colnum_tag:
-            colnum = int(colnum_tag.split(":", 1)[1])
-            if colnum < 1 or colnum > len(first_row):
-                raise click.ClickException(
-                    f"Column number {colnum} is out of range: file has {len(first_row)} column(s)"
-                )
-    except (IOError, OSError) as e:
-        raise click.ClickException(f"Could not read CSV file: {e}")
+            if colname_tag and has_header:
+                colname = colname_tag.split(":", 1)[1]
+                if colname not in first_row:
+                    raise click.ClickException(
+                        f"Column '{colname}' not found in {op.basename(csv_path)}. "
+                        f"Available columns: {', '.join(first_row)}"
+                    )
+            elif colnum_tag:
+                colnum = int(colnum_tag.split(":", 1)[1])
+                if colnum < 1 or colnum > len(first_row):
+                    raise click.ClickException(
+                        f"Column number {colnum} is out of range: file has {len(first_row)} column(s)"
+                    )
+        except (IOError, OSError) as e:
+            raise click.ClickException(f"Could not read CSV file: {e}")
 
     # Derive assembly name from the FASTA filename stem (e.g. "ref.fa" -> "ref")
     assembly_name = op.splitext(op.basename(fasta_path))[0]
 
-    # Determine the directory to mount in Docker (common ancestor of both files)
-    common = op.commonpath([csv_path, fasta_path])
+    # Determine the directory to mount in Docker (common ancestor of all files)
+    common = op.commonpath([*csv_paths, fasta_path])
     directory = common if op.isdir(common) else op.dirname(common)
 
-    logger.info("csv_path %s", csv_path)
+    for csv_path in csv_paths:
+        logger.info("csv_path %s", csv_path)
     logger.info("fasta_path %s", fasta_path)
     logger.info("assembly_name %s", assembly_name)
     logger.info("directory %s", directory)
@@ -1035,38 +1039,80 @@ def pileup(file, reference, tag, track_height, image, platform):
         except ResgenError as e:
             logger.warning("Could not register chromsizes tileset: %s; chromosome-labels track will be skipped", e)
 
-    # Register CSV tileset (no refrow — association is via assembly tag)
-    csv_tileset = find_or_add_tileset(csv_path)
-    csv_tags = [
-        {"name": "filetype:pileup-csv"},
-        {"name": "datatype:reads"},
-        {"name": f"assembly:{assembly_name}"},
-    ]
-    for t in tag:
-        csv_tags.append({"name": t})
-    rgc.update_dataset(csv_tileset.uuid, {"tags": csv_tags})
-
     from higlass import view as hg_view
 
-    pileup_track = csv_tileset.hg_track(track_type="pileup", position="top", height=track_height)
-
-    tracks = []
-    if chromsizes_tileset:
-        tracks.append(
-            chromsizes_tileset.hg_track(
-                track_type="horizontal-chromosome-labels", position="top", height=20
+    # Build common track prefix (chromosome labels + sequence) shared across all views
+    def _make_common_tracks():
+        tracks = []
+        if chromsizes_tileset:
+            tracks.append(
+                chromsizes_tileset.hg_track(
+                    track_type="horizontal-chromosome-labels", position="top", height=20
+                )
             )
-        )
-    if op.isfile(fai_path):
-        tracks.append(
-            fasta_tileset.hg_track(
-                track_type="horizontal-sequence", position="top", height=40
+        if op.isfile(fai_path):
+            tracks.append(
+                fasta_tileset.hg_track(
+                    track_type="horizontal-sequence", position="top", height=40
+                )
             )
-        )
-    tracks.append(pileup_track)
-    viewconf = hg_view(*tracks)
+        return tracks
 
-    saved_viewconf = project.add_viewconf(viewconf.viewconf().dict(), "Pileup view")
+    # Compute grid dimensions approximating the golden ratio (ncols / nrows ≈ φ)
+    phi = (1 + math.sqrt(5)) / 2
+    def _grid_dims(n):
+        if n == 1:
+            return 1, 1
+        best = (1, 1, float("inf"))
+        for nrows in range(1, math.ceil(math.sqrt(n)) + 1):
+            ncols = math.ceil(n / nrows)
+            if ncols < nrows:
+                continue
+            dist = abs(ncols / nrows - phi)
+            if dist < best[2]:
+                best = (ncols, nrows, dist)
+        return best[0], best[1]
+
+    ncols, nrows = _grid_dims(len(csv_paths))
+    view_width = max(1, 12 // ncols)
+
+    # Register each CSV tileset and build its view
+    all_views = []
+    for csv_path in csv_paths:
+        csv_tileset = find_or_add_tileset(csv_path)
+        csv_tags = [
+            {"name": "filetype:pileup-csv"},
+            {"name": "datatype:reads"},
+            {"name": f"assembly:{assembly_name}"},
+        ]
+        for t in tag:
+            csv_tags.append({"name": t})
+        rgc.update_dataset(csv_tileset.uuid, {"tags": csv_tags})
+
+        pileup_track = csv_tileset.hg_track(
+            track_type="pileup", position="top", height=track_height
+        )
+        tracks = _make_common_tracks() + [pileup_track]
+        all_views.append(hg_view(*tracks, width=view_width))
+
+    # Arrange views into rows, then stack rows vertically
+    row_viewconfs = []
+    for row_idx in range(nrows):
+        start = row_idx * ncols
+        row_views = all_views[start : start + ncols]
+        row_vc = row_views[0]
+        for v in row_views[1:]:
+            row_vc = row_vc | v
+        row_viewconfs.append(row_vc)
+
+    viewconf = row_viewconfs[0]
+    for row_vc in row_viewconfs[1:]:
+        viewconf = viewconf / row_vc
+
+    # hg_view() returns a View (has .viewconf()); | and / return a Viewconf directly
+    vc = viewconf.viewconf() if hasattr(viewconf, "viewconf") else viewconf
+    title = "Pileup view" if len(csv_paths) == 1 else f"Pileup views ({len(csv_paths)} files)"
+    saved_viewconf = project.add_viewconf(vc.dict(), title)
     url = f"http://localhost:{port}/viewer/{saved_viewconf['uuid']}?at={token['access_token']}&rt={token['refresh_token']}"
 
     logger.info(f"Opening {url}")
