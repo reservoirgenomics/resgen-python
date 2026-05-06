@@ -1090,8 +1090,9 @@ def pileup(files, reference, tag, track_height, image, platform):
         rgc.update_dataset(csv_tileset.uuid, {"tags": csv_tags})
 
         pileup_track = csv_tileset.hg_track(
-            track_type="pileup", position="top", height=track_height
-        ).opts(
+            track_type="pileup",
+            position="top",
+            height=track_height,
             name=op.basename(csv_path),
             labelPosition="bottomLeft",
             labelColor="#808080",
