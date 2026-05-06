@@ -1,3 +1,8 @@
+## v0.13.2
+
+- `resgen manage pileup` now accepts multiple CSV files; each is opened as a separate view arranged in a grid whose column-to-row ratio approximates the golden ratio
+- Each pileup track displays its source filename as a label in the bottom-left corner in dark grey
+
 ## v0.13.1
 
 - Add chromsizes and sequence tracks to `resgen manage pileup` view: generates `.fai` index if absent, registers it as `chromsizes-tsv`, and adds `horizontal-chromosome-labels` and `horizontal-sequence` tracks above the pileup track
