@@ -1091,6 +1091,10 @@ def pileup(files, reference, tag, track_height, image, platform):
 
         pileup_track = csv_tileset.hg_track(
             track_type="pileup", position="top", height=track_height
+        ).opts(
+            name=op.basename(csv_path),
+            labelPosition="bottomLeft",
+            labelColor="#808080",
         )
         tracks = _make_common_tracks() + [pileup_track]
         all_views.append(hg_view(*tracks, width=view_width))
