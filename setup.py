@@ -22,7 +22,7 @@ def get_requirements(path):
 
 setup_args = {
     "name": "resgen-python",
-    "version": "0.14.0",
+    "version": "0.15.0",
     "packages": find_packages(),
     "description": "Python bindings for the resgen genomic data service",
     # "long_description": read("README.md"),
