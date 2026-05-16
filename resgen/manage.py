@@ -22,11 +22,30 @@ from resgen.utils import (
     infer_datatype,
 )
 
+import shutil
 import sys
 
 from slugid import nice
 
 logger = logging.getLogger(__name__)
+
+
+def get_container_runtime():
+    """Get the container runtime to use (docker or finch).
+
+    Checks the RESGEN_CONTAINER_RUNTIME environment variable first.
+    If not set, auto-detects by checking which binaries are in PATH,
+    preferring docker for backwards compatibility.
+    """
+    runtime = os.environ.get("RESGEN_CONTAINER_RUNTIME")
+    if runtime:
+        return runtime
+
+    for candidate in ("docker", "finch"):
+        if shutil.which(candidate):
+            return candidate
+
+    return "docker"  # fallback default
 
 START_TEMPLATE = """
 services:
@@ -184,7 +203,7 @@ def _start(
             try:
                 result = subprocess.run(
                     [
-                        "docker",
+                        get_container_runtime(),
                         "exec",
                         current_container["id"],
                         "test",
@@ -282,7 +301,7 @@ def _start(
 
         f.write(compose_text)
 
-    cmd = ["docker", "compose"]
+    cmd = [get_container_runtime(), "compose"]
     cmd += ["--project-directory", "."]
     cmd += ["-f", compose_file, "up"]
     if not foreground:
@@ -336,7 +355,7 @@ def stop(directory):
     """Stop a running instance."""
     compose_file = get_compose_file(directory)
 
-    run(["docker", "compose", "-f", compose_file, "down"])
+    run([get_container_runtime(), "compose", "-f", compose_file, "down"])
 
 
 @manage.command()
@@ -375,10 +394,11 @@ def shell(directory, style):
     """
     directory_hash = hashlib.md5(abspath(directory).encode()).hexdigest()[:8]
 
+    runtime = get_container_runtime()
     if style == "run":
         run(
             [
-                "docker",
+                runtime,
                 "run",
                 "-v",
                 f"{directory}/.resgen/data/:/data",
@@ -388,7 +408,7 @@ def shell(directory, style):
             ]
         )
     else:
-        run(["docker", "exec", "-it", f"rgc-{directory_hash}", "bash"])
+        run([runtime, "exec", "-it", f"rgc-{directory_hash}", "bash"])
 
 
 def _create_user(directory, username, password):
@@ -399,7 +419,7 @@ def _create_user(directory, username, password):
 
     run(
         [
-            "docker",
+            get_container_runtime(),
             "compose",
             "--project-directory",
             directory,
@@ -435,7 +455,7 @@ def create_superuser(directory):
 
     run(
         [
-            "docker",
+            get_container_runtime(),
             "compose",
             "--project-directory",
             directory,
@@ -533,9 +553,10 @@ def _get_running_containers(image=DEFAULT_IMAGE):
     import json
 
     try:
+        runtime = get_container_runtime()
         result = subprocess.run(
             [
-                "docker",
+                runtime,
                 "ps",
                 "--filter",
                 "name=rgc-",
@@ -555,7 +576,7 @@ def _get_running_containers(image=DEFAULT_IMAGE):
             if line:
                 container = json.loads(line)
                 inspect_result = subprocess.run(
-                    ["docker", "inspect", container["ID"]],
+                    [runtime, "inspect", container["ID"]],
                     capture_output=True,
                     text=True,
                     check=True,
@@ -644,7 +665,7 @@ def update(image):
 
     Does the same thing as the "pull" command below
     """
-    run(["docker", "pull", image])
+    run([get_container_runtime(), "pull", image])
     logger.info(f"Updated image: {image}")
 
 
@@ -655,7 +676,7 @@ def pull(image):
 
     Alias of "update"
     """
-    run(["docker", "pull", image])
+    run([get_container_runtime(), "pull", image])
     logger.info(f"Updated image: {image}")
 
 

@@ -3,10 +3,107 @@ import tempfile
 from unittest.mock import MagicMock, patch, call
 import pytest
 
-from resgen.manage import _sync_datasets, can_sync_datasets
+from resgen.manage import _sync_datasets, can_sync_datasets, get_container_runtime
 from resgen.license import LicenseInfo, LicenseError
 from resgen.exceptions import ResgenError
 from resgen import UnknownConnectionException
+
+
+class TestGetContainerRuntime:
+    """Test suite for the get_container_runtime function."""
+
+    def test_env_var_takes_precedence(self):
+        """Test that RESGEN_CONTAINER_RUNTIME env var overrides auto-detection."""
+        with patch.dict(os.environ, {"RESGEN_CONTAINER_RUNTIME": "finch"}):
+            with patch("shutil.which", return_value="/usr/local/bin/docker"):
+                assert get_container_runtime() == "finch"
+
+    def test_env_var_docker(self):
+        """Test that RESGEN_CONTAINER_RUNTIME can explicitly select docker."""
+        with patch.dict(os.environ, {"RESGEN_CONTAINER_RUNTIME": "docker"}):
+            with patch("shutil.which", return_value=None):
+                assert get_container_runtime() == "docker"
+
+    def test_autodetect_docker_when_only_docker_present(self):
+        """Test that docker is selected when only docker is in PATH."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("RESGEN_CONTAINER_RUNTIME", None)
+            with patch("shutil.which", side_effect=lambda x: "/usr/bin/docker" if x == "docker" else None):
+                assert get_container_runtime() == "docker"
+
+    def test_autodetect_finch_when_only_finch_present(self):
+        """Test that finch is selected when only finch is in PATH."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("RESGEN_CONTAINER_RUNTIME", None)
+            with patch("shutil.which", side_effect=lambda x: "/usr/local/bin/finch" if x == "finch" else None):
+                assert get_container_runtime() == "finch"
+
+    def test_autodetect_prefers_docker_when_both_present(self):
+        """Test that docker is preferred over finch when both are available."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("RESGEN_CONTAINER_RUNTIME", None)
+            with patch("shutil.which", return_value="/usr/local/bin/runtime"):
+                assert get_container_runtime() == "docker"
+
+    def test_fallback_to_docker_when_neither_present(self):
+        """Test that docker is returned as fallback when neither runtime is in PATH."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("RESGEN_CONTAINER_RUNTIME", None)
+            with patch("shutil.which", return_value=None):
+                assert get_container_runtime() == "docker"
+
+
+class TestManageCommandsUseRuntime:
+    """Test that manage commands delegate to the configured container runtime."""
+
+    @patch("resgen.manage.get_container_runtime", return_value="finch")
+    @patch("resgen.manage.run")
+    def test_stop_uses_runtime(self, mock_run, mock_runtime):
+        """Test that stop passes the detected runtime to compose down."""
+        from resgen.manage import stop
+        from click.testing import CliRunner
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            compose_dir = os.path.join(tmpdir, ".resgen", "config")
+            os.makedirs(compose_dir)
+            compose_file = os.path.join(compose_dir, "stack.yml")
+            with open(compose_file, "w") as f:
+                f.write("")
+
+            result = CliRunner().invoke(stop, [tmpdir])
+
+        assert mock_runtime.called
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "finch"
+        assert "compose" in cmd
+
+    @patch("resgen.manage.get_container_runtime", return_value="finch")
+    @patch("resgen.manage.run")
+    def test_pull_uses_runtime(self, mock_run, mock_runtime):
+        """Test that pull passes the detected runtime to the pull subcommand."""
+        from resgen.manage import pull
+        from click.testing import CliRunner
+
+        CliRunner().invoke(pull, [])
+
+        assert mock_runtime.called
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "finch"
+        assert cmd[1] == "pull"
+
+    @patch("resgen.manage.get_container_runtime", return_value="finch")
+    @patch("resgen.manage.run")
+    def test_update_uses_runtime(self, mock_run, mock_runtime):
+        """Test that update passes the detected runtime to the pull subcommand."""
+        from resgen.manage import update
+        from click.testing import CliRunner
+
+        CliRunner().invoke(update, [])
+
+        assert mock_runtime.called
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "finch"
+        assert cmd[1] == "pull"
 
 
 class TestSyncDatasets:
