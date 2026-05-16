@@ -1,4 +1,4 @@
-## Unreleased
+## v0.15.0
 
 - Add support for [finch](https://github.com/runfinch/finch) as an alternative container runtime in `resgen manage`. The runtime is auto-detected from PATH (docker preferred for backwards compatibility) or can be set explicitly via the `RESGEN_CONTAINER_RUNTIME` environment variable
 
