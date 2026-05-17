@@ -3,6 +3,10 @@
 - Fix `resgen manage sync-datasets` ignoring `~/.resgen/license.jwt`: `_resolve_license` now checks `~/.resgen/license.jwt` first (the user's authoritative license), before the stale project-cached copy written by `start`
 - Refactor license resolution into a shared `_resolve_license(directory)` helper; remove unused `get_license_text`
 - Fix `resgen manage stop` not stopping the container: `start` and `stop` now both use an explicit `--project-name rgc-<hash>` so Docker Compose can match the running project regardless of the working directory
+- Fix `resgen manage start` mounting volumes at wrong paths when a relative directory is used: `_start` now resolves the directory to an absolute path before writing the compose file
+- Fix `resgen manage sync-datasets` failing with "Unable to login" on a freshly started container: a readiness poll (up to 60 s) now waits for the server to return HTTP 200 before attempting to connect, matching the behaviour of `view` and `pileup`
+- Add container ID column to `resgen manage list` output
+- Add DEBUG-level logging in `get_license` to trace which license file is loaded and what permissions it resolves to
 
 ## v0.15.0
 
