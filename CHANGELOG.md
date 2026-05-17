@@ -2,6 +2,7 @@
 
 - Fix `resgen manage sync-datasets` ignoring `~/.resgen/license.jwt`: `_resolve_license` now checks `~/.resgen/license.jwt` first (the user's authoritative license), before the stale project-cached copy written by `start`
 - Refactor license resolution into a shared `_resolve_license(directory)` helper; remove unused `get_license_text`
+- Fix `resgen manage stop` not stopping the container: `start` and `stop` now both use an explicit `--project-name rgc-<hash>` so Docker Compose can match the running project regardless of the working directory
 
 ## v0.15.0
 

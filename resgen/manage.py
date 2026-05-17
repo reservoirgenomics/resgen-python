@@ -296,7 +296,7 @@ def _start(
         f.write(compose_text)
 
     cmd = [get_container_runtime(), "compose"]
-    cmd += ["--project-directory", "."]
+    cmd += ["--project-name", f"rgc-{directory_hash}"]
     cmd += ["-f", compose_file, "up"]
     if not foreground:
         cmd += ["-d"]
@@ -348,8 +348,9 @@ def start(directory, license, port, platform, image, foreground, use_aws_creds):
 def stop(directory):
     """Stop a running instance."""
     compose_file = get_compose_file(directory)
+    directory_hash = hashlib.md5(abspath(directory).encode()).hexdigest()[:8]
 
-    run([get_container_runtime(), "compose", "-f", compose_file, "down"])
+    run([get_container_runtime(), "compose", "--project-name", f"rgc-{directory_hash}", "-f", compose_file, "down"])
 
 
 @manage.command()
