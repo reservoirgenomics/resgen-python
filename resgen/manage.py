@@ -164,6 +164,10 @@ def _start(
     If not, a new one will be created and populated with all of the files
     in the directory.
     """
+    # Resolve to absolute path so compose volume paths are absolute and
+    # independent of the working directory when docker compose processes the file.
+    directory = op.abspath(directory)
+
     # Resolve license text before checking running containers so we can detect
     # if the license has changed and the container needs a restart
     if not license:
