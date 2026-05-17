@@ -536,6 +536,20 @@ def _sync_datasets(directory, image=DEFAULT_IMAGE):
         logger.error(f"No running resgen container found for directory: {directory}")
         return
 
+    import time
+    import requests as _requests
+
+    for _ in range(60):
+        try:
+            if _requests.get(f"{host}/api/v1/tilesets/", timeout=2).status_code == 200:
+                break
+        except Exception:
+            pass
+        time.sleep(1)
+    else:
+        logger.error("Server at %s did not become ready in time", host)
+        return
+
     try:
         rgc = rg.connect(
             username=user, password=password, host=host, auth_provider="local"
