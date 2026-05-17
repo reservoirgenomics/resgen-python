@@ -61,17 +61,24 @@ def get_license(filepath: Optional[str] = None) -> LicenseInfo:
     """Get the current license. If a filepath is specified, try to load it from there.
     If no filename is specified then try to load from the RESGEN_LICENSE_JWT
     env var. If there's no license there then return a guest license."""
+    import logging
+    _log = logging.getLogger(__name__)
     if filepath:
         with open(filepath, "r") as f:
             license_txt = f.read().strip()
 
-            if not license_txt:
-                # Empty license file
-                return guest_license()
+        _log.debug("get_license(%s): len=%d empty=%s", filepath, len(license_txt), not license_txt)
 
-            return license_info(license_txt)
+        if not license_txt:
+            # Empty license file
+            return guest_license()
+
+        result = license_info(license_txt)
+        _log.debug("get_license(%s): resolved permissions=%s", filepath, result.permissions)
+        return result
 
     LICENSE_JWT = os.environ.get("RESGEN_LICENSE_JWT")
+    _log.debug("get_license(no filepath): RESGEN_LICENSE_JWT set=%s", bool(LICENSE_JWT))
 
     if not LICENSE_JWT:
         return guest_license()

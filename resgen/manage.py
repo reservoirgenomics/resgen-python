@@ -685,11 +685,21 @@ def cli_open(directory):
     """Open a browser to the server running in the specified directory."""
     import webbrowser
 
+    directory = op.abspath(directory)
     url = _get_directory_url(directory)
 
     if not url:
         logger.error(f"No running resgen container found for directory: {directory}")
         return
+
+    rgc = rg.connect(
+        host=url,
+        auth_provider="local",
+        credentials_dir=directory,
+    )
+
+    token = rgc.get_local_token()
+    url = f"{url}?at={token['access_token']}&rt={token['refresh_token']}"
 
     logger.info(f"Opening {url}")
     webbrowser.open(url)

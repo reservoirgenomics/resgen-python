@@ -1,3 +1,7 @@
+## v0.15.2
+
+- `resgen manage open` now opens the browser authenticated (same as `resgen manage view`): connects to the local server, obtains access/refresh tokens, and appends them as `?at=…&rt=…` query parameters to the URL
+
 ## v0.15.1
 
 - Fix `resgen manage sync-datasets` ignoring `~/.resgen/license.jwt`: `_resolve_license` now checks `~/.resgen/license.jwt` first (the user's authoritative license), before the stale project-cached copy written by `start`
