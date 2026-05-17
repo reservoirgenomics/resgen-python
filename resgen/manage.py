@@ -95,12 +95,6 @@ services:
 LOGGED_SERVICES = ["nginx", "uwsgi", "celery"]
 
 
-def get_license_text(base_directory: str) -> str:
-    """Locate the license file in the resgen metadata
-    in a base directory."""
-    with open(join(base_directory, ".resgen/license.jwt"), "r") as f:
-        return f.read()
-
 
 def get_compose_file(base_directory):
     """Locate the docker compose file in the resgen metadata
@@ -470,16 +464,26 @@ def create_superuser(directory):
     )
 
 
-def can_sync_datasets(directory, total_tilesets):
-    project_license_path = join(directory, ".resgen/license.jwt")
-    home_license_path = os.path.expanduser("~/.resgen/license.jwt")
+def _resolve_license(directory: str):
+    """Return the active LicenseInfo for a directory.
 
-    if op.exists(project_license_path):
-        license = get_license(project_license_path)
-    elif op.exists(home_license_path):
-        license = get_license(home_license_path)
-    else:
-        license = get_license()
+    Priority order:
+    1. <directory>/.resgen/license.jwt  (cached by ``start``)
+    2. ~/.resgen/license.jwt
+    3. RESGEN_LICENSE_JWT env var / guest
+    """
+    project_path = join(directory, ".resgen/license.jwt")
+    home_path = os.path.expanduser("~/.resgen/license.jwt")
+
+    if op.exists(project_path):
+        return get_license(project_path)
+    if op.exists(home_path):
+        return get_license(home_path)
+    return get_license()
+
+
+def can_sync_datasets(directory, total_tilesets):
+    license = _resolve_license(directory)
 
     # Only guest accounts are limited in how many datasets they
     # can add

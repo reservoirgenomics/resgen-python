@@ -1,6 +1,7 @@
 ## v0.15.1
 
 - Fix `resgen manage sync-datasets` ignoring `~/.resgen/license.jwt`: `can_sync_datasets` now falls back to the home-directory license (then the `RESGEN_LICENSE_JWT` env var) when no project-local `.resgen/license.jwt` is present, matching the behaviour of `resgen manage start`
+- Refactor license resolution into a shared `_resolve_license(directory)` helper; remove unused `get_license_text`
 
 ## v0.15.0
 
