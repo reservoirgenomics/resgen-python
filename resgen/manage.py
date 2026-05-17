@@ -639,12 +639,12 @@ def _list_containers(image=DEFAULT_IMAGE):
         print("No running resgen containers found.")
         return
 
-    print(f"{'URL':<25} {'Status':<20} {'Directory':<50}")
-    print("-" * 95)
+    print(f"{'URL':<25} {'Status':<20} {'Container ID':<15} {'Directory':<50}")
+    print("-" * 112)
 
     for container in containers:
         url = f"http://localhost:{container['port']}"
-        print(f"{url:<25} {'Running':<20} {container['directory']:<50}\n")
+        print(f"{url:<25} {'Running':<20} {container['id'][:12]:<15} {container['directory']:<50}\n")
 
 
 @manage.command()
