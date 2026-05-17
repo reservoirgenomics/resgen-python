@@ -1,3 +1,7 @@
+## v0.15.1
+
+- Fix `resgen manage sync-datasets` ignoring `~/.resgen/license.jwt`: `can_sync_datasets` now falls back to the home-directory license (then the `RESGEN_LICENSE_JWT` env var) when no project-local `.resgen/license.jwt` is present, matching the behaviour of `resgen manage start`
+
 ## v0.15.0
 
 - Add support for [finch](https://github.com/runfinch/finch) as an alternative container runtime in `resgen manage`. The runtime is auto-detected from PATH (docker preferred for backwards compatibility) or can be set explicitly via the `RESGEN_CONTAINER_RUNTIME` environment variable

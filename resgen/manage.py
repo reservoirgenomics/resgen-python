@@ -471,7 +471,15 @@ def create_superuser(directory):
 
 
 def can_sync_datasets(directory, total_tilesets):
-    license = get_license(join(directory, ".resgen/license.jwt"))
+    project_license_path = join(directory, ".resgen/license.jwt")
+    home_license_path = os.path.expanduser("~/.resgen/license.jwt")
+
+    if op.exists(project_license_path):
+        license = get_license(project_license_path)
+    elif op.exists(home_license_path):
+        license = get_license(home_license_path)
+    else:
+        license = get_license()
 
     # Only guest accounts are limited in how many datasets they
     # can add
