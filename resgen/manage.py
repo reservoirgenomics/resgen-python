@@ -468,17 +468,17 @@ def _resolve_license(directory: str):
     """Return the active LicenseInfo for a directory.
 
     Priority order:
-    1. <directory>/.resgen/license.jwt  (cached by ``start``)
-    2. ~/.resgen/license.jwt
+    1. ~/.resgen/license.jwt  (user's license — most authoritative)
+    2. <directory>/.resgen/license.jwt  (cached by ``start``)
     3. RESGEN_LICENSE_JWT env var / guest
     """
-    project_path = join(directory, ".resgen/license.jwt")
     home_path = os.path.expanduser("~/.resgen/license.jwt")
+    project_path = join(directory, ".resgen/license.jwt")
 
-    if op.exists(project_path):
-        return get_license(project_path)
     if op.exists(home_path):
         return get_license(home_path)
+    if op.exists(project_path):
+        return get_license(project_path)
     return get_license()
 
 
