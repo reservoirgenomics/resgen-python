@@ -476,10 +476,16 @@ def _resolve_license(directory: str):
     project_path = join(directory, ".resgen/license.jwt")
 
     if op.exists(home_path):
-        return get_license(home_path)
+        lic = get_license(home_path)
+        logger.info("License: using %s (permissions=%s)", home_path, lic.permissions)
+        return lic
     if op.exists(project_path):
-        return get_license(project_path)
-    return get_license()
+        lic = get_license(project_path)
+        logger.info("License: using %s (permissions=%s)", project_path, lic.permissions)
+        return lic
+    lic = get_license()
+    logger.info("License: no file found, using env/guest (permissions=%s)", lic.permissions)
+    return lic
 
 
 def can_sync_datasets(directory, total_tilesets):
