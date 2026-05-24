@@ -1,3 +1,7 @@
+## Unreleased
+
+- Fix `add_link_dataset()` leaving the `filetype` field empty: inferred filetype is now included in the POST body at creation time so the server records it on the tileset object (ISSUE-001)
+
 ## v0.15.2
 
 - `resgen manage open` now opens the browser authenticated (same as `resgen manage view`): connects to the local server, obtains access/refresh tokens, and appends them as `?at=…&rt=…` query parameters to the URL

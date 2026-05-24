@@ -710,6 +710,11 @@ class ResgenProject:
             "tags": [],
         }
 
+        filename = filepath.split("/")[-1]
+        filetype = infer_filetype(filename)
+        if filetype:
+            body["filetype"] = filetype
+
         if index_filepath:
             body["indexfile"] = index_filepath
 
