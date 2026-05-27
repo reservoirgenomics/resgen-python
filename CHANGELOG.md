@@ -1,4 +1,4 @@
-## Unreleased
+## v0.15.3
 
 - Fix `add_link_dataset()` leaving the `filetype` field empty: inferred filetype is now included in the POST body at creation time so the server records it on the tileset object (ISSUE-001)
 - Fix `KeyError` on login when the server response omits `refresh_token`: use `.get("refresh_token")` so the field is returned as `None` rather than raising an exception
