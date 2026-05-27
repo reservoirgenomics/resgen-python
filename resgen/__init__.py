@@ -350,7 +350,7 @@ class ResgenConnection:
         self.token = data["access_token"]
         return {
             "access_token": self.token,
-            "refresh_token": data["refresh_token"],
+            "refresh_token": data.get("refresh_token"),
         }
 
     def find_project(self, project_name: str, gruser: str = None):
