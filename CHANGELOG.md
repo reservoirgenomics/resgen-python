@@ -1,3 +1,17 @@
+## v0.16.0
+
+- **S3 Mount Support**: Add `resgen manage s3 add/remove/list` commands to mount S3 paths as folders within local projects
+  - S3-mounted data is synced alongside local files when running `resgen manage sync-datasets`
+  - Mount configuration stored in `.resgen/mounts.yml`
+  - Folder conflict validation prevents mounting to existing local folder names
+  - Automatic index file association (`.bai`, `.fai`, `.tbi`) for S3 datasets
+- **Direct S3 Sync**: Support syncing directly from S3 paths with `resgen manage sync-datasets s3://bucket/prefix`
+  - Project name defaults to the last component of the S3 path
+  - All S3 objects under the prefix are synced as datasets with folder hierarchy preserved
+- Add PyYAML dependency for S3 mount configuration management
+- Extend `add_and_update_local_datasets()` to handle S3 datasets via `add_s3_dataset()`
+- Add comprehensive test coverage for S3 mount management and dataset listing
+
 ## v0.15.3
 
 - Fix `add_link_dataset()` leaving the `filetype` field empty: inferred filetype is now included in the POST body at creation time so the server records it on the tileset object (ISSUE-001)

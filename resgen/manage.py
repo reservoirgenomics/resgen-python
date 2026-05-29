@@ -12,6 +12,9 @@ from resgen.sync.folder import (
     get_remote_datasets,
     add_and_update_local_datasets,
     remove_stale_remote_datasets,
+    get_s3_datasets,
+    load_s3_mounts,
+    save_s3_mounts,
 )
 from resgen.license import get_license, datasets_allowed, LicenseError
 from resgen.exceptions import ResgenError
@@ -524,17 +527,37 @@ def _get_directory_url(directory, image=DEFAULT_IMAGE):
 def _sync_datasets(directory, image=DEFAULT_IMAGE):
     """Make sure all the datasets in the directory are represented in the
     resgen project. The resgen project will be named after the directory's
-    basename."""
-    directory = op.abspath(directory)
-    project_name = op.basename(directory)
+    basename.
+
+    If directory starts with s3://, syncs directly from S3 without local files.
+    """
+    # Check if this is an S3 path
+    is_s3_path = directory.startswith("s3://")
+
+    if is_s3_path:
+        # For S3 paths, use the last component as project name
+        path_parts = directory.rstrip("/").split("/")
+        project_name = path_parts[-1] if len(path_parts) > 1 else path_parts[0]
+        # For S3, we need to find a running container in current directory
+        working_dir = op.abspath(".")
+        host = _get_directory_url(working_dir, image=image)
+        if not host:
+            logger.error(
+                f"No running resgen container found for current directory: {working_dir}. "
+                "Start a container first with 'resgen manage start'"
+            )
+            return
+    else:
+        directory = op.abspath(directory)
+        project_name = op.basename(directory)
+        host = _get_directory_url(directory, image=image)
+
+        if not host:
+            logger.error(f"No running resgen container found for directory: {directory}")
+            return
 
     user = "local"
     password = "local"
-    host = _get_directory_url(directory, image=image)
-
-    if not host:
-        logger.error(f"No running resgen container found for directory: {directory}")
-        return
 
     import time
     import requests as _requests
@@ -559,10 +582,34 @@ def _sync_datasets(directory, image=DEFAULT_IMAGE):
         return
 
     project = rgc.find_or_create_project(project_name)
-    local_datasets = get_local_datasets(directory)
+
+    # Get datasets based on whether this is S3 or local
+    if is_s3_path:
+        logger.info(f"Syncing from S3 path: {directory}")
+        try:
+            local_datasets = get_s3_datasets(directory)
+        except Exception as e:
+            logger.error(f"Failed to list S3 datasets: {e}")
+            return
+    else:
+        local_datasets = get_local_datasets(directory)
+
+        # Load and merge S3 mounts for local directories
+        s3_mounts = load_s3_mounts(directory)
+        for mount in s3_mounts:
+            try:
+                logger.info(f"Loading S3 mount: {mount['path']} -> {mount['folder']}")
+                s3_datasets = get_s3_datasets(mount["path"], folder_prefix=mount["folder"])
+                local_datasets.extend(s3_datasets)
+                logger.info(f"Loaded {len(s3_datasets)} datasets from S3 mount")
+            except Exception as e:
+                logger.error(f"Failed to load S3 mount {mount['path']}: {e}")
+
     remote_datasets = get_remote_datasets(project)
 
-    can_sync_datasets(directory, len(local_datasets))
+    # For S3 paths, use current directory for license check
+    license_check_dir = working_dir if is_s3_path else directory
+    can_sync_datasets(license_check_dir, len(local_datasets))
 
     try:
         add_and_update_local_datasets(
@@ -582,6 +629,120 @@ def _sync_datasets(directory, image=DEFAULT_IMAGE):
 @click.option("-i", "--image", default=DEFAULT_IMAGE)
 def sync_datasets(directory, image):
     _sync_datasets(directory, image=image)
+
+
+@manage.group()
+def s3():
+    """Manage S3 mounts for resgen projects."""
+    pass
+
+
+@s3.command("add")
+@click.argument("s3_path")
+@click.argument("directory", default=".")
+@click.option("--folder", default=None, help="Folder name within project (defaults to S3 path basename)")
+def s3_add(s3_path, directory, folder):
+    """Add an S3 path as a mounted folder in the project.
+
+    Example:
+        resgen manage s3 add s3://my-bucket/reference-data
+        resgen manage s3 add s3://my-bucket/data --folder refs
+        resgen manage s3 add ~/data/project s3://my-bucket/data
+    """
+    from resgen.sync.folder import load_s3_mounts, save_s3_mounts, get_local_datasets
+
+    directory = op.abspath(directory)
+
+    # Default folder name to last component of S3 path
+    if not folder:
+        # Parse s3://bucket/prefix to get the last component
+        path_parts = s3_path.rstrip("/").split("/")
+        folder = path_parts[-1] if len(path_parts) > 1 else path_parts[0]
+
+    # Validate S3 path format
+    if not s3_path.startswith("s3://"):
+        logger.error("Invalid S3 path. Must start with s3://")
+        return
+
+    # Check if folder already exists locally
+    local_datasets = get_local_datasets(directory)
+    local_folders = {d["name"] for d in local_datasets if d["is_folder"] and "/" not in d["fullpath"]}
+
+    if folder in local_folders:
+        logger.error(
+            f"Folder '{folder}' already exists locally. "
+            "Choose a different name with --folder or rename the local folder."
+        )
+        return
+
+    # Load existing mounts
+    mounts = load_s3_mounts(directory)
+
+    # Check if this folder is already mounted
+    if any(m["folder"] == folder for m in mounts):
+        logger.error(f"S3 mount with folder '{folder}' already exists")
+        return
+
+    # Add new mount
+    mounts.append({"path": s3_path, "folder": folder})
+    save_s3_mounts(directory, mounts)
+
+    logger.info(f"Added S3 mount: {s3_path} -> {folder}")
+    logger.info(f"Run 'resgen manage sync-datasets {directory}' to sync the mounted data")
+
+
+@s3.command("remove")
+@click.argument("folder")
+@click.argument("directory", default=".")
+def s3_remove(folder, directory):
+    """Remove an S3 mount from the project.
+
+    Example:
+        resgen manage s3 remove reference-data
+        resgen manage s3 remove reference-data ~/data/project
+    """
+    from resgen.sync.folder import load_s3_mounts, save_s3_mounts
+
+    directory = op.abspath(directory)
+
+    # Load existing mounts
+    mounts = load_s3_mounts(directory)
+
+    # Find and remove the mount
+    original_count = len(mounts)
+    mounts = [m for m in mounts if m["folder"] != folder]
+
+    if len(mounts) == original_count:
+        logger.error(f"No S3 mount found with folder '{folder}'")
+        return
+
+    save_s3_mounts(directory, mounts)
+    logger.info(f"Removed S3 mount: {folder}")
+    logger.info(f"Run 'resgen manage sync-datasets {directory}' to remove the remote datasets")
+
+
+@s3.command("list")
+@click.argument("directory", default=".")
+def s3_list(directory):
+    """List all S3 mounts for the project.
+
+    Example:
+        resgen manage s3 list
+        resgen manage s3 list ~/data/project
+    """
+    from resgen.sync.folder import load_s3_mounts
+
+    directory = op.abspath(directory)
+    mounts = load_s3_mounts(directory)
+
+    if not mounts:
+        print("No S3 mounts configured.")
+        return
+
+    print(f"{'Folder':<30} {'S3 Path':<60}")
+    print("-" * 90)
+    for mount in mounts:
+        print(f"{mount['folder']:<30} {mount['path']:<60}")
 
 
 def _get_running_containers(image=DEFAULT_IMAGE):
